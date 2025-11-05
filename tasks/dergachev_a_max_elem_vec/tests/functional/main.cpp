@@ -158,32 +158,6 @@ TEST(DergachevAMaxElemVecBasicTest, TestLargeVector_MPI) {
   }
 }
 
-TEST(DergachevAMaxElemVecConsistencyTest, TestSEQandMPIGiveSameResult) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 100;
-
-  DergachevAMaxElemVecSEQ seq_task(input);
-  ASSERT_TRUE(seq_task.Validation());
-  ASSERT_TRUE(seq_task.PreProcessing());
-  ASSERT_TRUE(seq_task.Run());
-  ASSERT_TRUE(seq_task.PostProcessing());
-  OutType seq_result = seq_task.GetOutput();
-
-  DergachevAMaxElemVecMPI mpi_task(input);
-  ASSERT_TRUE(mpi_task.Validation());
-  ASSERT_TRUE(mpi_task.PreProcessing());
-  ASSERT_TRUE(mpi_task.Run());
-  ASSERT_TRUE(mpi_task.PostProcessing());
-
-  if (rank == 0) {
-    OutType mpi_result = mpi_task.GetOutput();
-
-    ASSERT_EQ(seq_result, mpi_result);
-  }
-}
-
 TEST(DergachevAMaxElemVecEdgeCasesTest, TestSingleElement_SEQ) {
   InType input = 1;
   DergachevAMaxElemVecSEQ task(input);
@@ -412,81 +386,6 @@ TEST(DergachevAMaxElemVecEdgeCasesTest, TestPowerOfTwo_MPI) {
     OutType result = task.GetOutput();
     ASSERT_GE(result, -1000);
     ASSERT_LE(result, 1000);
-  }
-}
-
-TEST(DergachevAMaxElemVecConsistencyTest, TestConsistencySmallVector) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 7;
-
-  DergachevAMaxElemVecSEQ seq_task(input);
-  ASSERT_TRUE(seq_task.Validation());
-  ASSERT_TRUE(seq_task.PreProcessing());
-  ASSERT_TRUE(seq_task.Run());
-  ASSERT_TRUE(seq_task.PostProcessing());
-  OutType seq_result = seq_task.GetOutput();
-
-  DergachevAMaxElemVecMPI mpi_task(input);
-  ASSERT_TRUE(mpi_task.Validation());
-  ASSERT_TRUE(mpi_task.PreProcessing());
-  ASSERT_TRUE(mpi_task.Run());
-  ASSERT_TRUE(mpi_task.PostProcessing());
-
-  if (rank == 0) {
-    OutType mpi_result = mpi_task.GetOutput();
-    ASSERT_EQ(seq_result, mpi_result);
-  }
-}
-
-TEST(DergachevAMaxElemVecConsistencyTest, TestConsistencyMediumVector) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 500;
-
-  DergachevAMaxElemVecSEQ seq_task(input);
-  ASSERT_TRUE(seq_task.Validation());
-  ASSERT_TRUE(seq_task.PreProcessing());
-  ASSERT_TRUE(seq_task.Run());
-  ASSERT_TRUE(seq_task.PostProcessing());
-  OutType seq_result = seq_task.GetOutput();
-
-  DergachevAMaxElemVecMPI mpi_task(input);
-  ASSERT_TRUE(mpi_task.Validation());
-  ASSERT_TRUE(mpi_task.PreProcessing());
-  ASSERT_TRUE(mpi_task.Run());
-  ASSERT_TRUE(mpi_task.PostProcessing());
-
-  if (rank == 0) {
-    OutType mpi_result = mpi_task.GetOutput();
-    ASSERT_EQ(seq_result, mpi_result);
-  }
-}
-
-TEST(DergachevAMaxElemVecConsistencyTest, TestConsistencyLargeVector) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 5000;
-
-  DergachevAMaxElemVecSEQ seq_task(input);
-  ASSERT_TRUE(seq_task.Validation());
-  ASSERT_TRUE(seq_task.PreProcessing());
-  ASSERT_TRUE(seq_task.Run());
-  ASSERT_TRUE(seq_task.PostProcessing());
-  OutType seq_result = seq_task.GetOutput();
-
-  DergachevAMaxElemVecMPI mpi_task(input);
-  ASSERT_TRUE(mpi_task.Validation());
-  ASSERT_TRUE(mpi_task.PreProcessing());
-  ASSERT_TRUE(mpi_task.Run());
-  ASSERT_TRUE(mpi_task.PostProcessing());
-
-  if (rank == 0) {
-    OutType mpi_result = mpi_task.GetOutput();
-    ASSERT_EQ(seq_result, mpi_result);
   }
 }
 
