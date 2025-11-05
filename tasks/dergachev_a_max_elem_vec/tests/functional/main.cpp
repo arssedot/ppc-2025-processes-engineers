@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <mpi.h>
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <string>
@@ -27,11 +28,16 @@ class DergachevAMaxElemVecFuncTests : public ppc::util::BaseRunFuncTests<InType,
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    int rank = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    int mpi_initialized = 0;
+    MPI_Initialized(&mpi_initialized);
 
-    if (rank != 0) {
-      return true;
+    if (mpi_initialized) {
+      int rank = 0;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+      if (rank != 0) {
+        return true;
+      }
     }
 
     if (input_data_ <= 0) {
@@ -58,379 +64,166 @@ class DergachevAMaxElemVecFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
 namespace {
 
-TEST_P(DergachevAMaxElemVecFuncTests, MatmulFromPic) {
+TEST_P(DergachevAMaxElemVecFuncTests, FindsExpectedMaximum) {
   ExecuteTest(GetParam());
 }
 
-const std::array<TestType, 3> kTestParam = {std::make_tuple(3, "3"), std::make_tuple(5, "5"), std::make_tuple(7, "7")};
+const std::array<TestType, 12> kFunctionalParams = {
+    std::make_tuple(1, "size_1_unit"),       std::make_tuple(2, "size_2_pair"),
+    std::make_tuple(3, "size_3_small"),      std::make_tuple(5, "size_5_fibonacci"),
+    std::make_tuple(7, "size_7_prime"),      std::make_tuple(17, "size_17_prime"),
+    std::make_tuple(31, "size_31_prime"),    std::make_tuple(64, "size_64_power2"),
+    std::make_tuple(99, "size_99_odd"),      std::make_tuple(128, "size_128_even"),
+    std::make_tuple(256, "size_256_power2"), std::make_tuple(50000, "size_50000_stress")};
 
-const auto kTestTasksList = std::tuple_cat(
-    ppc::util::AddFuncTask<DergachevAMaxElemVecMPI, InType>(kTestParam, PPC_SETTINGS_dergachev_a_max_elem_vec),
-    ppc::util::AddFuncTask<DergachevAMaxElemVecSEQ, InType>(kTestParam, PPC_SETTINGS_dergachev_a_max_elem_vec));
+const auto kTaskMatrix = std::tuple_cat(
+    ppc::util::AddFuncTask<DergachevAMaxElemVecMPI, InType>(kFunctionalParams, PPC_SETTINGS_dergachev_a_max_elem_vec),
+    ppc::util::AddFuncTask<DergachevAMaxElemVecSEQ, InType>(kFunctionalParams, PPC_SETTINGS_dergachev_a_max_elem_vec));
 
-const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
+const auto kParameterizedValues = ppc::util::ExpandToValues(kTaskMatrix);
 
-const auto kPerfTestName = DergachevAMaxElemVecFuncTests::PrintFuncTestName<DergachevAMaxElemVecFuncTests>;
+const auto kFunctionalTestName = DergachevAMaxElemVecFuncTests::PrintFuncTestName<DergachevAMaxElemVecFuncTests>;
 
-INSTANTIATE_TEST_SUITE_P(PicMatrixTests, DergachevAMaxElemVecFuncTests, kGtestValues, kPerfTestName);
+INSTANTIATE_TEST_SUITE_P(MaximumSearchSuite, DergachevAMaxElemVecFuncTests, kParameterizedValues, kFunctionalTestName);
 
-TEST(DergachevAMaxElemVecValidationTest, TestValidationWithValidInput_SEQ) {
-  InType input = 10;
-  DergachevAMaxElemVecSEQ task(input);
-  ASSERT_TRUE(task.Validation());
+TEST(DergachevAMaxElemVecValidation, RejectsNonPositiveInput_SEQ) {
+  const std::array<InType, 3> kInvalid = {0, -1, -50};
+  for (InType value : kInvalid) {
+    DergachevAMaxElemVecSEQ task(value);
+    EXPECT_FALSE(task.Validation());
+    EXPECT_FALSE(task.PreProcessing());
+  }
 }
 
-TEST(DergachevAMaxElemVecValidationTest, TestValidationWithValidInput_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 10;
-  DergachevAMaxElemVecMPI task(input);
-  ASSERT_TRUE(task.Validation());
+TEST(DergachevAMaxElemVecValidation, RejectsNonPositiveInput_MPI) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  const std::array<InType, 3> kInvalid = {0, -4, -128};
+  for (InType value : kInvalid) {
+    DergachevAMaxElemVecMPI task(value);
+    EXPECT_FALSE(task.Validation());
+    EXPECT_FALSE(task.PreProcessing());
+  }
 }
 
-TEST(DergachevAMaxElemVecValidationTest, TestValidationWithZeroInput_SEQ) {
-  InType input = 0;
-  DergachevAMaxElemVecSEQ task(input);
+TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInput_SEQ) {
+  DergachevAMaxElemVecSEQ task(10);
+  EXPECT_TRUE(task.Validation());
+  EXPECT_TRUE(task.PreProcessing());
+}
+
+TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInput_MPI) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  DergachevAMaxElemVecMPI task(10);
+  EXPECT_TRUE(task.Validation());
+  EXPECT_TRUE(task.PreProcessing());
+}
+
+TEST(DergachevAMaxElemVecRun, ReturnsFalseForInvalidSize_SEQ) {
+  DergachevAMaxElemVecSEQ task(0);
   ASSERT_FALSE(task.Validation());
+  ASSERT_FALSE(task.PreProcessing());
+  EXPECT_FALSE(task.Run());
 }
 
-TEST(DergachevAMaxElemVecValidationTest, TestValidationWithNegativeInput_SEQ) {
-  InType input = -5;
+TEST(DergachevAMaxElemVecConsistency, SequentialMatchesFormula) {
+  const InType input = 1234;
   DergachevAMaxElemVecSEQ task(input);
-  ASSERT_FALSE(task.Validation());
-}
-
-TEST(DergachevAMaxElemVecBasicTest, TestSmallVector_SEQ) {
-  InType input = 5;
-  DergachevAMaxElemVecSEQ task(input);
-
   ASSERT_TRUE(task.Validation());
   ASSERT_TRUE(task.PreProcessing());
   ASSERT_TRUE(task.Run());
   ASSERT_TRUE(task.PostProcessing());
 
-  OutType result = task.GetOutput();
-
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecBasicTest, TestSmallVector_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 5;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
+  InType expected = std::numeric_limits<InType>::min();
+  for (int idx = 0; idx < input; ++idx) {
+    const InType value = (idx * 7) % 2000 - 1000;
+    expected = std::max(expected, value);
   }
+  EXPECT_EQ(expected, task.GetOutput());
 }
 
-TEST(DergachevAMaxElemVecBasicTest, TestLargeVector_SEQ) {
-  InType input = 1000;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecBasicTest, TestLargeVector_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 1000;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
+TEST(DergachevAMaxElemVecConsistency, SeqAndMpiProduceSameResult) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
   }
+  const InType input = 4096;
+
+  DergachevAMaxElemVecSEQ seq_task(input);
+  ASSERT_TRUE(seq_task.Validation());
+  ASSERT_TRUE(seq_task.PreProcessing());
+  ASSERT_TRUE(seq_task.Run());
+  ASSERT_TRUE(seq_task.PostProcessing());
+
+  DergachevAMaxElemVecMPI mpi_task(input);
+  ASSERT_TRUE(mpi_task.Validation());
+  ASSERT_TRUE(mpi_task.PreProcessing());
+  ASSERT_TRUE(mpi_task.Run());
+  ASSERT_TRUE(mpi_task.PostProcessing());
+
+  EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
 }
 
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestSingleElement_SEQ) {
-  InType input = 1;
+TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRange_SEQ) {
+  const InType input = 2048;
   DergachevAMaxElemVecSEQ task(input);
-
   ASSERT_TRUE(task.Validation());
   ASSERT_TRUE(task.PreProcessing());
   ASSERT_TRUE(task.Run());
   ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
+  EXPECT_GE(task.GetOutput(), -1000);
+  EXPECT_LE(task.GetOutput(), 1000);
 }
 
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestSingleElement_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 1;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
+TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRange_MPI) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
   }
+  const InType input = 2048;
+  DergachevAMaxElemVecMPI task(input);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  EXPECT_GE(task.GetOutput(), -1000);
+  EXPECT_LE(task.GetOutput(), 1000);
 }
 
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestTwoElements_SEQ) {
-  InType input = 2;
+TEST(DergachevAMaxElemVecLifecycle, RunRequiresPreprocessing_SEQ) {
+  DergachevAMaxElemVecSEQ task(15);
+  EXPECT_THROW(task.Run(), std::runtime_error);
+}
+
+TEST(DergachevAMaxElemVecLifecycle, PostProcessingRequiresRun_SEQ) {
+  DergachevAMaxElemVecSEQ task(15);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  EXPECT_THROW(task.PostProcessing(), std::runtime_error);
+}
+
+TEST(DergachevAMaxElemVecLifecycle, FullPipeline_SEQ) {
+  const InType input = 8192;
   DergachevAMaxElemVecSEQ task(input);
-
   ASSERT_TRUE(task.Validation());
   ASSERT_TRUE(task.PreProcessing());
   ASSERT_TRUE(task.Run());
   ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
+  EXPECT_EQ(task.GetOutput(), 999);
 }
 
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestTwoElements_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 2;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
+TEST(DergachevAMaxElemVecLifecycle, FullPipeline_MPI) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
   }
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestThreeElements_SEQ) {
-  InType input = 3;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestThreeElements_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 3;
+  const InType input = 8192;
   DergachevAMaxElemVecMPI task(input);
-
   ASSERT_TRUE(task.Validation());
   ASSERT_TRUE(task.PreProcessing());
   ASSERT_TRUE(task.Run());
   ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
-  }
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestPrimeNumberSize_SEQ) {
-  InType input = 17;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestPrimeNumberSize_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 17;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
-  }
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestOddNumberSize_SEQ) {
-  InType input = 99;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestOddNumberSize_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 99;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
-  }
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestEvenNumberSize_SEQ) {
-  InType input = 128;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestEvenNumberSize_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 128;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
-  }
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestPowerOfTwo_SEQ) {
-  InType input = 256;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecEdgeCasesTest, TestPowerOfTwo_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 256;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
-  }
-}
-
-TEST(DergachevAMaxElemVecStressTest, TestVeryLargeVector_SEQ) {
-  InType input = 50000;
-  DergachevAMaxElemVecSEQ task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  OutType result = task.GetOutput();
-  ASSERT_GE(result, -1000);
-  ASSERT_LE(result, 1000);
-}
-
-TEST(DergachevAMaxElemVecStressTest, TestVeryLargeVector_MPI) {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  InType input = 50000;
-  DergachevAMaxElemVecMPI task(input);
-
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  if (rank == 0) {
-    OutType result = task.GetOutput();
-    ASSERT_GE(result, -1000);
-    ASSERT_LE(result, 1000);
-  }
+  EXPECT_EQ(task.GetOutput(), 999);
 }
 
 }  // namespace
