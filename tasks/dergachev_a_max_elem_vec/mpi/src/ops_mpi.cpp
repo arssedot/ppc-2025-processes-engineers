@@ -4,10 +4,8 @@
 
 #include <algorithm>
 #include <limits>
-#include <vector>
 
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
-#include "util/include/util.hpp"
 
 namespace dergachev_a_max_elem_vec {
 
@@ -58,17 +56,14 @@ bool DergachevAMaxElemVecMPI::RunImpl() {
   const int base_chunk_size = vector_size / total_processes;
   const int remainder_elements = vector_size % total_processes;
 
-  const int start_index = process_rank * base_chunk_size + std::min(process_rank, remainder_elements);
+  const int start_index = (process_rank * base_chunk_size) + std::min(process_rank, remainder_elements);
   const int end_index = start_index + base_chunk_size + (process_rank < remainder_elements ? 1 : 0);
 
   InType local_maximum = std::numeric_limits<InType>::min();
 
   for (int idx = start_index; idx < end_index; ++idx) {
-    const InType element_value = (idx * 7) % 2000 - 1000;
-
-    if (element_value > local_maximum) {
-      local_maximum = element_value;
-    }
+    const InType element_value = ((idx * 7) % 2000) - 1000;
+    local_maximum = std::max(element_value, local_maximum);
   }
 
   InType global_maximum = std::numeric_limits<InType>::min();

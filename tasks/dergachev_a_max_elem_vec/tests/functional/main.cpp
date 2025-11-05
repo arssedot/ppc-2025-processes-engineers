@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 
@@ -31,7 +33,7 @@ class DergachevAMaxElemVecFuncTests : public ppc::util::BaseRunFuncTests<InType,
     int mpi_initialized = 0;
     MPI_Initialized(&mpi_initialized);
 
-    if (mpi_initialized) {
+    if (mpi_initialized != 0) {
       int rank = 0;
       MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -46,10 +48,8 @@ class DergachevAMaxElemVecFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
     InType expected_max = std::numeric_limits<InType>::min();
     for (int idx = 0; idx < input_data_; ++idx) {
-      InType value = (idx * 7) % 2000 - 1000;
-      if (value > expected_max) {
-        expected_max = value;
-      }
+      const InType value = ((idx * 7) % 2000) - 1000;
+      expected_max = std::max(value, expected_max);
     }
     return (expected_max == output_data);
   }
@@ -86,34 +86,34 @@ const auto kFunctionalTestName = DergachevAMaxElemVecFuncTests::PrintFuncTestNam
 
 INSTANTIATE_TEST_SUITE_P(MaximumSearchSuite, DergachevAMaxElemVecFuncTests, kParameterizedValues, kFunctionalTestName);
 
-TEST(DergachevAMaxElemVecValidation, RejectsNonPositiveInput_SEQ) {
-  const std::array<InType, 3> kInvalid = {0, -1, -50};
-  for (InType value : kInvalid) {
+TEST(DergachevAMaxElemVecValidation, RejectsNonPositiveInputSeq) {
+  const std::array<InType, 3> invalid_values = {0, -1, -50};
+  for (InType value : invalid_values) {
     DergachevAMaxElemVecSEQ task(value);
     EXPECT_FALSE(task.Validation());
     EXPECT_FALSE(task.PreProcessing());
   }
 }
 
-TEST(DergachevAMaxElemVecValidation, RejectsNonPositiveInput_MPI) {
+TEST(DergachevAMaxElemVecValidation, RejectsNonPositiveInputMpi) {
   if (!ppc::util::IsUnderMpirun()) {
     GTEST_SKIP();
   }
-  const std::array<InType, 3> kInvalid = {0, -4, -128};
-  for (InType value : kInvalid) {
+  const std::array<InType, 3> invalid_values = {0, -4, -128};
+  for (InType value : invalid_values) {
     DergachevAMaxElemVecMPI task(value);
     EXPECT_FALSE(task.Validation());
     EXPECT_FALSE(task.PreProcessing());
   }
 }
 
-TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInput_SEQ) {
+TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInputSeq) {
   DergachevAMaxElemVecSEQ task(10);
   EXPECT_TRUE(task.Validation());
   EXPECT_TRUE(task.PreProcessing());
 }
 
-TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInput_MPI) {
+TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInputMpi) {
   if (!ppc::util::IsUnderMpirun()) {
     GTEST_SKIP();
   }
@@ -122,7 +122,7 @@ TEST(DergachevAMaxElemVecValidation, AcceptsPositiveInput_MPI) {
   EXPECT_TRUE(task.PreProcessing());
 }
 
-TEST(DergachevAMaxElemVecRun, ReturnsFalseForInvalidSize_SEQ) {
+TEST(DergachevAMaxElemVecRun, ReturnsFalseForInvalidSizeSeq) {
   DergachevAMaxElemVecSEQ task(0);
   ASSERT_FALSE(task.Validation());
   ASSERT_FALSE(task.PreProcessing());
@@ -139,7 +139,7 @@ TEST(DergachevAMaxElemVecConsistency, SequentialMatchesFormula) {
 
   InType expected = std::numeric_limits<InType>::min();
   for (int idx = 0; idx < input; ++idx) {
-    const InType value = (idx * 7) % 2000 - 1000;
+    const InType value = ((idx * 7) % 2000) - 1000;
     expected = std::max(expected, value);
   }
   EXPECT_EQ(expected, task.GetOutput());
@@ -166,7 +166,7 @@ TEST(DergachevAMaxElemVecConsistency, SeqAndMpiProduceSameResult) {
   EXPECT_EQ(seq_task.GetOutput(), mpi_task.GetOutput());
 }
 
-TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRange_SEQ) {
+TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRangeSeq) {
   const InType input = 2048;
   DergachevAMaxElemVecSEQ task(input);
   ASSERT_TRUE(task.Validation());
@@ -177,7 +177,7 @@ TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRange_SEQ) {
   EXPECT_LE(task.GetOutput(), 1000);
 }
 
-TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRange_MPI) {
+TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRangeMpi) {
   if (!ppc::util::IsUnderMpirun()) {
     GTEST_SKIP();
   }
@@ -191,19 +191,19 @@ TEST(DergachevAMaxElemVecPostProcessing, OutputIsWithinRange_MPI) {
   EXPECT_LE(task.GetOutput(), 1000);
 }
 
-TEST(DergachevAMaxElemVecLifecycle, RunRequiresPreprocessing_SEQ) {
+TEST(DergachevAMaxElemVecLifecycle, RunRequiresPreprocessingSeq) {
   DergachevAMaxElemVecSEQ task(15);
   EXPECT_THROW(task.Run(), std::runtime_error);
 }
 
-TEST(DergachevAMaxElemVecLifecycle, PostProcessingRequiresRun_SEQ) {
+TEST(DergachevAMaxElemVecLifecycle, PostProcessingRequiresRunSeq) {
   DergachevAMaxElemVecSEQ task(15);
   ASSERT_TRUE(task.Validation());
   ASSERT_TRUE(task.PreProcessing());
   EXPECT_THROW(task.PostProcessing(), std::runtime_error);
 }
 
-TEST(DergachevAMaxElemVecLifecycle, FullPipeline_SEQ) {
+TEST(DergachevAMaxElemVecLifecycle, FullPipelineSeq) {
   const InType input = 8192;
   DergachevAMaxElemVecSEQ task(input);
   ASSERT_TRUE(task.Validation());
@@ -213,7 +213,7 @@ TEST(DergachevAMaxElemVecLifecycle, FullPipeline_SEQ) {
   EXPECT_EQ(task.GetOutput(), 999);
 }
 
-TEST(DergachevAMaxElemVecLifecycle, FullPipeline_MPI) {
+TEST(DergachevAMaxElemVecLifecycle, FullPipelineMpi) {
   if (!ppc::util::IsUnderMpirun()) {
     GTEST_SKIP();
   }
