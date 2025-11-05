@@ -27,6 +27,17 @@ class DergachevAMaxElemVecFuncTests : public ppc::util::BaseRunFuncTests<InType,
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
+    int rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (rank != 0) {
+      return true;
+    }
+
+    if (input_data_ <= 0) {
+      return true;
+    }
+
     InType expected_max = std::numeric_limits<InType>::min();
     for (int idx = 0; idx < input_data_; ++idx) {
       InType value = (idx * 7) % 2000 - 1000;

@@ -72,11 +72,9 @@ bool DergachevAMaxElemVecMPI::RunImpl() {
   }
 
   InType global_maximum = std::numeric_limits<InType>::min();
-  MPI_Reduce(&local_maximum, &global_maximum, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Allreduce(&local_maximum, &global_maximum, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 
-  if (process_rank == 0) {
-    GetOutput() = global_maximum;
-  }
+  GetOutput() = global_maximum;
 
   return true;
 }
