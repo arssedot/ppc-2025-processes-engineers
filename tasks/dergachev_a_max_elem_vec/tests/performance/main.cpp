@@ -8,7 +8,7 @@
 namespace dergachev_a_max_elem_vec {
 
 class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  const int kCount_ = 100;
+  const int kCount_ = 100000000;
   InType input_data_{};
 
   void SetUp() override {
@@ -16,7 +16,7 @@ class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType,
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    return input_data_ == output_data;
+    return (output_data >= -1000 && output_data <= 1000);
   }
 
   InType GetTestInputData() final {
@@ -28,8 +28,8 @@ TEST_P(DergachevAMaxElemVecPerfTests, RunPerfModes) {
   ExecuteTest(GetParam());
 }
 
-const auto kAllPerfTasks =
-    ppc::util::MakeAllPerfTasks<InType, DergachevAMaxElemVecMPI, DergachevAMaxElemVecSEQ>(PPC_SETTINGS_dergachev_a_max_elem_vec);
+const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<InType, DergachevAMaxElemVecMPI, DergachevAMaxElemVecSEQ>(
+    PPC_SETTINGS_dergachev_a_max_elem_vec);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 

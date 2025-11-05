@@ -2,7 +2,8 @@
 
 #include <mpi.h>
 
-#include <numeric>
+#include <algorithm>
+#include <limits>
 #include <vector>
 
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
@@ -13,60 +14,81 @@ namespace dergachev_a_max_elem_vec {
 DergachevAMaxElemVecMPI::DergachevAMaxElemVecMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
-  GetOutput() = 0;
+  GetOutput() = std::numeric_limits<InType>::min();
 }
 
 bool DergachevAMaxElemVecMPI::ValidationImpl() {
-  return (GetInput() > 0) && (GetOutput() == 0);
+  int process_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+
+  if (process_rank == 0) {
+    return (GetInput() > 0);
+  }
+  return true;
 }
 
 bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
-  GetOutput() = 2 * GetInput();
-  return GetOutput() > 0;
+  int process_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+
+  if (process_rank == 0) {
+    return GetInput() > 0;
+  }
+
+  return true;
 }
 
 bool DergachevAMaxElemVecMPI::RunImpl() {
-  auto input = GetInput();
-  if (input == 0) {
-    return false;
-  }
+  int process_rank = 0;
+  int total_processes = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
 
-  for (InType i = 0; i < GetInput(); i++) {
-    for (InType j = 0; j < GetInput(); j++) {
-      for (InType k = 0; k < GetInput(); k++) {
-        std::vector<InType> tmp(i + j + k, 1);
-        GetOutput() += std::accumulate(tmp.begin(), tmp.end(), 0);
-        GetOutput() -= i + j + k;
-      }
+  int vector_size = 0;
+
+  if (process_rank == 0) {
+    vector_size = GetInput();
+    if (vector_size <= 0) {
+      return false;
     }
   }
 
-  const int num_threads = ppc::util::GetNumThreads();
-  GetOutput() *= num_threads;
+  MPI_Bcast(&vector_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  const int base_chunk_size = vector_size / total_processes;
+  const int remainder_elements = vector_size % total_processes;
 
-  if (rank == 0) {
-    GetOutput() /= num_threads;
-  } else {
-    int counter = 0;
-    for (int i = 0; i < num_threads; i++) {
-      counter++;
-    }
+  const int start_index = process_rank * base_chunk_size + std::min(process_rank, remainder_elements);
+  const int end_index = start_index + base_chunk_size + (process_rank < remainder_elements ? 1 : 0);
 
-    if (counter != 0) {
-      GetOutput() /= counter;
+  InType local_maximum = std::numeric_limits<InType>::min();
+
+  for (int idx = start_index; idx < end_index; ++idx) {
+    const InType element_value = (idx * 7) % 2000 - 1000;
+
+    if (element_value > local_maximum) {
+      local_maximum = element_value;
     }
   }
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  return GetOutput() > 0;
+  InType global_maximum = std::numeric_limits<InType>::min();
+  MPI_Reduce(&local_maximum, &global_maximum, 1, MPI_INT, MPI_MAX, 0, MPI_COMM_WORLD);
+
+  if (process_rank == 0) {
+    GetOutput() = global_maximum;
+  }
+
+  return true;
 }
 
 bool DergachevAMaxElemVecMPI::PostProcessingImpl() {
-  GetOutput() -= GetInput();
-  return GetOutput() > 0;
+  int process_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+
+  if (process_rank == 0) {
+    return GetOutput() >= std::numeric_limits<InType>::min();
+  }
+  return true;
 }
 
 }  // namespace dergachev_a_max_elem_vec
