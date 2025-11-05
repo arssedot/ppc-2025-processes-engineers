@@ -1,17 +1,10 @@
 #include <gtest/gtest.h>
 #include <mpi.h>
-#include <stb/stb_image.h>
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
-#include <cstdint>
-#include <numeric>
-#include <stdexcept>
+#include <limits>
 #include <string>
 #include <tuple>
-#include <utility>
-#include <vector>
 
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
 #include "dergachev_a_max_elem_vec/mpi/include/ops_mpi.hpp"
@@ -29,31 +22,19 @@ class DergachevAMaxElemVecFuncTests : public ppc::util::BaseRunFuncTests<InType,
 
  protected:
   void SetUp() override {
-    int width = -1;
-    int height = -1;
-    int channels = -1;
-    std::vector<uint8_t> img;
-    // Read image in RGB to ensure consistent channel count
-    {
-      std::string abs_path = ppc::util::GetAbsoluteTaskPath(PPC_ID_dergachev_a_max_elem_vec, "pic.jpg");
-      auto *data = stbi_load(abs_path.c_str(), &width, &height, &channels, STBI_rgb);
-      if (data == nullptr) {
-        throw std::runtime_error("Failed to load image: " + std::string(stbi_failure_reason()));
-      }
-      channels = STBI_rgb;
-      img = std::vector<uint8_t>(data, data + (static_cast<ptrdiff_t>(width * height * channels)));
-      stbi_image_free(data);
-      if (std::cmp_not_equal(width, height)) {
-        throw std::runtime_error("width != height: ");
-      }
-    }
-
     TestType params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
-    input_data_ = width - height + std::min(std::accumulate(img.begin(), img.end(), 0), channels);
+    input_data_ = std::get<0>(params);
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    return (input_data_ == output_data);
+    InType expected_max = std::numeric_limits<InType>::min();
+    for (int idx = 0; idx < input_data_; ++idx) {
+      InType value = (idx * 7) % 2000 - 1000;
+      if (value > expected_max) {
+        expected_max = value;
+      }
+    }
+    return (expected_max == output_data);
   }
 
   InType GetTestInputData() final {
