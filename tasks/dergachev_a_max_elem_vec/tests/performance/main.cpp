@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <limits>
+
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
 #include "dergachev_a_max_elem_vec/mpi/include/ops_mpi.hpp"
 #include "dergachev_a_max_elem_vec/seq/include/ops_seq.hpp"
@@ -8,15 +11,30 @@
 namespace dergachev_a_max_elem_vec {
 
 class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  const int kCount_ = 100000000;
+  static constexpr int kCount = 100000000;
   InType input_data_{};
 
   void SetUp() override {
-    input_data_ = kCount_;
+    input_data_ = kCount;
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    return (output_data >= -1000 && output_data <= 1000);
+    InType expected_max = std::numeric_limits<InType>::min();
+    const int limit = std::min<int>(input_data_, 2000);
+
+    for (int idx = 0; idx < limit; ++idx) {
+      const InType value = static_cast<InType>(((idx * 7) % 2000) - 1000);
+      expected_max = std::max(expected_max, value);
+      if (expected_max == 999) {
+        break;
+      }
+    }
+
+    if (input_data_ > limit) {
+      expected_max = std::max(expected_max, static_cast<InType>(999));
+    }
+
+    return output_data == expected_max;
   }
 
   InType GetTestInputData() final {
