@@ -2,10 +2,8 @@
 
 #include <algorithm>
 #include <limits>
-#include <vector>
 
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
-#include "util/include/util.hpp"
 
 namespace dergachev_a_max_elem_vec {
 
@@ -32,11 +30,8 @@ bool DergachevAMaxElemVecSEQ::RunImpl() {
   InType current_max = std::numeric_limits<InType>::min();
 
   for (int idx = 0; idx < vector_size; ++idx) {
-    const InType current_value = (idx * 7) % 2000 - 1000;
-
-    if (current_value > current_max) {
-      current_max = current_value;
-    }
+    const auto current_value = static_cast<InType>(((idx * 7) % 2000) - 1000);
+    current_max = std::max(current_value, current_max);
   }
 
   GetOutput() = current_max;

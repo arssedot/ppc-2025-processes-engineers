@@ -23,7 +23,7 @@ class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType,
     const int limit = std::min<int>(input_data_, 2000);
 
     for (int idx = 0; idx < limit; ++idx) {
-      const InType value = static_cast<InType>(((idx * 7) % 2000) - 1000);
+      const auto value = static_cast<InType>(((idx * 7) % 2000) - 1000);
       expected_max = std::max(expected_max, value);
       if (expected_max == 999) {
         break;
