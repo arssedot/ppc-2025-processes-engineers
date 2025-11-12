@@ -255,7 +255,7 @@ TEST(DergachevAMaxElemVecEdgeCases, RunWithoutPreprocessingReturnsCorrectlySeq) 
   DergachevAMaxElemVecSEQ task_zero(0);
   EXPECT_FALSE(task_zero.Validation());
   EXPECT_FALSE(task_zero.PreProcessing());
-  
+
   DergachevAMaxElemVecSEQ task_negative(-5);
   EXPECT_FALSE(task_negative.Validation());
   EXPECT_FALSE(task_negative.PreProcessing());
