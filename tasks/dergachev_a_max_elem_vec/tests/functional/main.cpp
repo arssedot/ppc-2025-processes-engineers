@@ -228,10 +228,18 @@ TEST(DergachevAMaxElemVecLifecycle, FullPipelineMpi) {
 
 TEST(DergachevAMaxElemVecTypeOfTask, SeqTaskTypeIsCorrect) {
   EXPECT_EQ(DergachevAMaxElemVecSEQ::GetStaticTypeOfTask(), ppc::task::TypeOfTask::kSEQ);
+  DergachevAMaxElemVecSEQ task(10);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  EXPECT_TRUE(task.PostProcessing());
 }
 
 TEST(DergachevAMaxElemVecTypeOfTask, MpiTaskTypeIsCorrect) {
   EXPECT_EQ(DergachevAMaxElemVecMPI::GetStaticTypeOfTask(), ppc::task::TypeOfTask::kMPI);
+  DergachevAMaxElemVecMPI task(10);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
 }
 
 TEST(DergachevAMaxElemVecRun, ReturnsFalseForInvalidSizeMpi) {
@@ -241,6 +249,144 @@ TEST(DergachevAMaxElemVecRun, ReturnsFalseForInvalidSizeMpi) {
   DergachevAMaxElemVecMPI task(-1);
   ASSERT_FALSE(task.Validation());
   ASSERT_FALSE(task.PreProcessing());
+}
+
+TEST(DergachevAMaxElemVecEdgeCases, RunWithoutPreprocessingReturnsCorrectlySeq) {
+  DergachevAMaxElemVecSEQ task_zero(0);
+  EXPECT_FALSE(task_zero.Validation());
+  EXPECT_FALSE(task_zero.PreProcessing());
+  
+  DergachevAMaxElemVecSEQ task_negative(-5);
+  EXPECT_FALSE(task_negative.Validation());
+  EXPECT_FALSE(task_negative.PreProcessing());
+}
+
+TEST(DergachevAMaxElemVecEdgeCases, SingleElementVectorSeq) {
+  DergachevAMaxElemVecSEQ task(1);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  EXPECT_EQ(task.GetOutput(), -1000);
+}
+
+TEST(DergachevAMaxElemVecEdgeCases, SingleElementVectorMpi) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  DergachevAMaxElemVecMPI task(1);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  EXPECT_EQ(task.GetOutput(), -1000);
+}
+
+TEST(DergachevAMaxElemVecEdgeCases, SmallVectorSeq) {
+  DergachevAMaxElemVecSEQ task(10);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  InType expected = std::numeric_limits<InType>::min();
+  for (int i = 0; i < 10; ++i) {
+    InType val = ((i * 7) % 2000) - 1000;
+    expected = std::max(expected, val);
+  }
+  EXPECT_EQ(task.GetOutput(), expected);
+}
+
+TEST(DergachevAMaxElemVecEdgeCases, SmallVectorMpi) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  DergachevAMaxElemVecMPI task(10);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  InType expected = std::numeric_limits<InType>::min();
+  for (int i = 0; i < 10; ++i) {
+    InType val = ((i * 7) % 2000) - 1000;
+    expected = std::max(expected, val);
+  }
+  EXPECT_EQ(task.GetOutput(), expected);
+}
+
+TEST(DergachevAMaxElemVecMpiRanks, WorkerProcessesHandleValidation) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  DergachevAMaxElemVecMPI task(100);
+  EXPECT_TRUE(task.Validation());
+  
+  if (rank != 0) {
+    EXPECT_TRUE(task.Validation());
+  }
+}
+
+TEST(DergachevAMaxElemVecMpiRanks, WorkerProcessesHandlePreProcessing) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  DergachevAMaxElemVecMPI task(50);
+  EXPECT_TRUE(task.Validation());
+  EXPECT_TRUE(task.PreProcessing());
+  
+  if (rank != 0) {
+    EXPECT_TRUE(task.PreProcessing());
+  }
+}
+
+TEST(DergachevAMaxElemVecMpiRanks, AllProcessesHandlePostProcessing) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  DergachevAMaxElemVecMPI task(25);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  EXPECT_TRUE(task.PostProcessing());
+}
+
+TEST(DergachevAMaxElemVecOutput, OutputInitializedCorrectlySeq) {
+  DergachevAMaxElemVecSEQ task(5);
+  EXPECT_EQ(task.GetOutput(), std::numeric_limits<InType>::min());
+}
+
+TEST(DergachevAMaxElemVecOutput, OutputInitializedCorrectlyMpi) {
+  DergachevAMaxElemVecMPI task(5);
+  EXPECT_EQ(task.GetOutput(), std::numeric_limits<InType>::min());
+}
+
+TEST(DergachevAMaxElemVecBoundary, LargeInputSeq) {
+  DergachevAMaxElemVecSEQ task(1000000);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  EXPECT_EQ(task.GetOutput(), 999);
+}
+
+TEST(DergachevAMaxElemVecBoundary, LargeInputMpi) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  DergachevAMaxElemVecMPI task(1000000);
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+  EXPECT_EQ(task.GetOutput(), 999);
 }
 
 }  // namespace
