@@ -226,6 +226,23 @@ TEST(DergachevAMaxElemVecLifecycle, FullPipelineMpi) {
   EXPECT_EQ(task.GetOutput(), 999);
 }
 
+TEST(DergachevAMaxElemVecTypeOfTask, SeqTaskTypeIsCorrect) {
+  EXPECT_EQ(DergachevAMaxElemVecSEQ::GetStaticTypeOfTask(), ppc::task::TypeOfTask::kSEQ);
+}
+
+TEST(DergachevAMaxElemVecTypeOfTask, MpiTaskTypeIsCorrect) {
+  EXPECT_EQ(DergachevAMaxElemVecMPI::GetStaticTypeOfTask(), ppc::task::TypeOfTask::kMPI);
+}
+
+TEST(DergachevAMaxElemVecRun, ReturnsFalseForInvalidSizeMpi) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  DergachevAMaxElemVecMPI task(-1);
+  ASSERT_FALSE(task.Validation());
+  ASSERT_FALSE(task.PreProcessing());
+}
+
 }  // namespace
 
 }  // namespace dergachev_a_max_elem_vec
