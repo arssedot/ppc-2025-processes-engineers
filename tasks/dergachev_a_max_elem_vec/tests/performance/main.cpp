@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
@@ -11,15 +12,16 @@
 namespace dergachev_a_max_elem_vec {
 
 class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-#ifdef CI_BUILD
-  static constexpr int kCount = 100000000;
-#else
-  static constexpr int kCount = 800000000;
-#endif
   InType input_data_{};
 
   void SetUp() override {
-    input_data_ = kCount;
+    // Используем меньший размер в CI окружении для более быстрого выполнения
+    const char* ci_env = std::getenv("CI");
+    if (ci_env != nullptr) {
+      input_data_ = 100000000;  // 100 млн для CI
+    } else {
+      input_data_ = 800000000;  // 800 млн для локального запуска
+    }
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
