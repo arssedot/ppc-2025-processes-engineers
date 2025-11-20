@@ -16,7 +16,7 @@ class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType,
 
   void SetUp() override {
     // Используем меньший размер в CI окружении для более быстрого выполнения
-    const char* ci_env = std::getenv("CI");
+    const char *ci_env = std::getenv("CI");
     if (ci_env != nullptr) {
       input_data_ = 100000000;  // 100 млн для CI
     } else {
