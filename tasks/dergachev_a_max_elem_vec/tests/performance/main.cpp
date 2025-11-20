@@ -11,7 +11,7 @@
 namespace dergachev_a_max_elem_vec {
 
 class DergachevAMaxElemVecPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  static constexpr int kCount = 100000000;
+  static constexpr int kCount = 800000000;
   InType input_data_{};
 
   void SetUp() override {
