@@ -8,6 +8,6 @@ threads:
 
 processes:
   # Use integer offsets for tasks; default 0.
-  task_1: 14
-  task_2: 14
-  task_3: 14
+  task_1: 17
+  task_2: 17
+  task_3: 17
