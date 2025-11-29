@@ -30,8 +30,13 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
 
   if (process_rank == 0) {
-    return GetInput() > 0;
+    vector_size_ = GetInput();
+    if (vector_size_ <= 0) {
+      return false;
+    }
   }
+
+  MPI_Bcast(&vector_size_, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   return true;
 }
@@ -42,19 +47,12 @@ bool DergachevAMaxElemVecMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
 
-  int vector_size = 0;
-
-  if (process_rank == 0) {
-    vector_size = GetInput();
-    if (vector_size <= 0) {
-      return false;
-    }
+  if (vector_size_ <= 0) {
+    return false;
   }
 
-  MPI_Bcast(&vector_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-  const int base_chunk_size = vector_size / total_processes;
-  const int remainder_elements = vector_size % total_processes;
+  const int base_chunk_size = vector_size_ / total_processes;
+  const int remainder_elements = vector_size_ % total_processes;
 
   const int start_index = (process_rank * base_chunk_size) + std::min(process_rank, remainder_elements);
   const int end_index = start_index + base_chunk_size + (process_rank < remainder_elements ? 1 : 0);

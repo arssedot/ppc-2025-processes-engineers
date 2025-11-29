@@ -69,9 +69,9 @@ end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
 
 ### Коммуникация
 
-1. **MPI_Bcast** - процесс 0 рассылает размер вектора N всем процессам
-2. **Локальные вычисления** - каждый процесс находит максимум в своем блоке
-3. **MPI_Allreduce** - сбор локальных максимумов и поиск глобального максимума
+1. **MPI_Bcast (PreProcessing)** - процесс 0 рассылает размер вектора N всем процессам
+2. **Локальные вычисления (Run)** - каждый процесс находит максимум в своем блоке
+3. **MPI_Allreduce (Run)** - сбор локальных максимумов и поиск глобального максимума
 
 Схема:
 ```
@@ -84,17 +84,16 @@ end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
 ### Роли процессов
 
 - **Процесс 0 (Master):**
-  - Рассылает размер вектора через MPI_Bcast
-  - Обрабатывает свой блок данных
-  - Участвует в MPI_Allreduce
-  - Сохраняет результат
+  - *PreProcessing:* Получает размер вектора из входных данных и рассылает его через MPI_Bcast
+  - *Run:* Обрабатывает свой блок данных, участвует в MPI_Allreduce
+  - *PostProcessing:* Сохраняет результат
 
 - **Процессы 1..P-1 (Workers):**
-  - Получают размер через MPI_Bcast
-  - Обрабатывают свой блок данных
-  - Участвуют в MPI_Allreduce
+  - *PreProcessing:* Получают размер вектора через MPI_Bcast
+  - *Run:* Обрабатывают свой блок данных, участвуют в MPI_Allreduce
+  - *PostProcessing:* Проверяют корректность результата
 
-Преимущества: минимальная коммуникация, отсутствие передачи данных.
+Преимущества: минимальная коммуникация, правильное разделение этапов pipeline, отсутствие передачи данных вектора.
 
 ## 5. Детали реализации
 
@@ -113,8 +112,8 @@ end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
 
 **Методы:**
 - `ValidationImpl()` - проверка входных данных (N > 0)
-- `PreProcessingImpl()` - предобработка
-- `RunImpl()` - основной алгоритм
+- `PreProcessingImpl()` - предобработка: процесс 0 получает размер вектора из входных данных, затем размер рассылается всем процессам через `MPI_Bcast`
+- `RunImpl()` - основной алгоритм: каждый процесс вычисляет локальный максимум в своём блоке, затем через `MPI_Allreduce` находится глобальный максимум
 - `PostProcessingImpl()` - проверка результата
 
 ### Граничные случаи
@@ -287,6 +286,28 @@ bool DergachevAMaxElemVecSEQ::RunImpl() {
 
 **Параллельная версия (MPI):**
 
+*PreProcessing - распределение размера вектора:*
+
+```cpp
+bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
+  int process_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+
+  if (process_rank == 0) {
+    vector_size_ = GetInput();
+    if (vector_size_ <= 0) {
+      return false;
+    }
+  }
+
+  MPI_Bcast(&vector_size_, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  return true;
+}
+```
+
+*Run - вычисление локальных и глобального максимума:*
+
 ```cpp
 bool DergachevAMaxElemVecMPI::RunImpl() {
   int process_rank = 0;
@@ -294,16 +315,12 @@ bool DergachevAMaxElemVecMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
 
-  int vector_size = 0;
-  if (process_rank == 0) {
-    vector_size = GetInput();
-    if (vector_size <= 0) return false;
+  if (vector_size_ <= 0) {
+    return false;
   }
-  
-  MPI_Bcast(&vector_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  const int base_chunk_size = vector_size / total_processes;
-  const int remainder_elements = vector_size % total_processes;
+  const int base_chunk_size = vector_size_ / total_processes;
+  const int remainder_elements = vector_size_ % total_processes;
   const int start_index = (process_rank * base_chunk_size) + 
                           std::min(process_rank, remainder_elements);
   const int end_index = start_index + base_chunk_size + 
