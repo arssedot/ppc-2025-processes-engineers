@@ -71,7 +71,6 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
 bool DergachevAMaxElemVecMPI::RunImpl() {
   InType local_maximum = std::numeric_limits<InType>::min();
 
-  
   for (const auto &value : local_data_) {
     local_maximum = std::max(value, local_maximum);
   }
