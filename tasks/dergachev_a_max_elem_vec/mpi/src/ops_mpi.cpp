@@ -51,7 +51,7 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
     send_counts[i] = base_chunk_size + (i < remainder ? 1 : 0);
     displacements[i] = i * base_chunk_size + std::min(i, remainder);
   }
-  
+
   std::vector<InType> full_data;
   if (process_rank == 0) {
     full_data.resize(vector_size_);
@@ -59,7 +59,7 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
       full_data[idx] = ((idx * 7) % 2000) - 1000;
     }
   }
-  
+
   local_data_.resize(send_counts[process_rank]);
 
   MPI_Scatterv(full_data.data(), send_counts.data(), displacements.data(), MPI_INT, local_data_.data(),
@@ -74,7 +74,7 @@ bool DergachevAMaxElemVecMPI::RunImpl() {
   }
 
   InType local_maximum = std::numeric_limits<InType>::min();
-  for (const auto& value : local_data_) {
+  for (const auto &value : local_data_) {
     local_maximum = std::max(value, local_maximum);
   }
 
