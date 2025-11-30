@@ -64,7 +64,7 @@
 2. **Вычисление размеров блоков:** Для каждого процесса вычисляются размеры данных и смещения:
    ```
    chunk_size[i] = N / P + (i < N % P ? 1 : 0)
-   displacement[i] = i * (N / P) + min(i, N % P)
+   displacement[i] = (i * (N / P)) + min(i, N % P)
    ```
    Первые `remainder` процессов получают на 1 элемент больше для равномерного распределения.
 
@@ -319,7 +319,7 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
   
   for (int i = 0; i < total_processes; ++i) {
     send_counts[i] = base_chunk_size + (i < remainder ? 1 : 0);
-    displacements[i] = i * base_chunk_size + std::min(i, remainder);
+    displacements[i] = (i * base_chunk_size) + std::min(i, remainder);
   }
 
   std::vector<InType> full_data;
@@ -368,7 +368,7 @@ int base_chunk_size = N / P;
 
 int remainder = N % P;
 
-int start = rank * base_chunk_size + min(rank, remainder);
+int start = (rank * base_chunk_size) + min(rank, remainder);
 
 int end = start + base_chunk_size + (rank < remainder ? 1 : 0);
 ```

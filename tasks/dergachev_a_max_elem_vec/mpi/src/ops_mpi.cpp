@@ -49,7 +49,7 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
 
   for (int i = 0; i < total_processes; ++i) {
     send_counts[i] = base_chunk_size + (i < remainder ? 1 : 0);
-    displacements[i] = i * base_chunk_size + std::min(i, remainder);
+    displacements[i] = (i * base_chunk_size) + std::min(i, remainder);
   }
 
   std::vector<InType> full_data;
