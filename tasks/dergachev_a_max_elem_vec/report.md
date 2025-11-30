@@ -55,24 +55,31 @@
 
 ### Распределение данных
 
-Используется блочная декомпозиция: каждый процесс обрабатывает свою непрерывную часть виртуального вектора.
+Используется блочная декомпозиция с использованием `MPI_Scatterv` для распределения данных между процессами.
 
-Для P процессов и N элементов:
-```
-chunk_size = N / P
-remainder = N % P
-start[rank] = rank * chunk_size + min(rank, remainder)
-end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
-```
+**Алгоритм распределения:**
 
-Первые `remainder` процессов получают на 1 элемент больше, чтобы равномерно распределить остаток.
+1. **Генерация данных:** Процесс 0 создаёт полный вектор размером N, генерируя элементы по формуле: `(idx * 7) % 2000 - 1000`
+
+2. **Вычисление размеров блоков:** Для каждого процесса вычисляются размеры данных и смещения:
+   ```
+   chunk_size[i] = N / P + (i < N % P ? 1 : 0)
+   displacement[i] = i * (N / P) + min(i, N % P)
+   ```
+   Первые `remainder` процессов получают на 1 элемент больше для равномерного распределения.
+
+3. **Распределение через MPI_Scatterv:** Процесс 0 рассылает блоки данных всем процессам (включая себя) согласно вычисленным размерам и смещениям.
+
+4. **Локальное хранение:** Каждый процесс получает свой блок данных в локальный вектор `local_data_`.
+
+Использование `MPI_Scatterv` необходимо, так как при N % P != 0 разные процессы получают блоки разного размера.
 
 ### Коммуникация
 
 1. **MPI_Bcast (PreProcessing)** - процесс 0 рассылает размер вектора N всем процессам
-2. **Data Split (PreProcessing)** - каждый процесс вычисляет границы своего блока (start_index, end_index) на основе ранга и общего числа процессов
-3. **Локальные вычисления (Run)** - каждый процесс находит максимум в своем блоке используя вычисленные границы
-4. **MPI_Allreduce (Run)** - сбор локальных максимумов и поиск глобального максимума
+2. **MPI_Scatterv (PreProcessing)** - процесс 0 распределяет блоки данных между всеми процессами с учётом неравномерных размеров
+3. **Локальные вычисления (Run)** - каждый процесс находит максимум в своём блоке полученных данных
+4. **MPI_Allreduce (Run)** - сбор локальных максимумов и поиск глобального максимума с операцией MPI_MAX
 
 Схема:
 ```
@@ -85,16 +92,16 @@ end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
 ### Роли процессов
 
 - **Процесс 0 (Master):**
-  - *PreProcessing:* Получает размер вектора из входных данных, рассылает его через MPI_Bcast, вычисляет границы своего блока 
-  - *Run:* Обрабатывает свой блок данных используя вычисленные границы, участвует в MPI_Allreduce
-  - *PostProcessing:* Сохраняет результат
+  - *PreProcessing:* Получает размер вектора из входных данных, генерирует полный вектор, рассылает размер через MPI_Bcast, распределяет данные через MPI_Scatterv 
+  - *Run:* Обрабатывает свой блок полученных данных, участвует в MPI_Allreduce
+  - *PostProcessing:* Сохраняет и проверяет результат
 
 - **Процессы 1..P-1 (Workers):**
-  - *PreProcessing:* Получают размер вектора через MPI_Bcast, вычисляют границы своего блока
-  - *Run:* Обрабатывают свой блок данных используя вычисленные границы, участвуют в MPI_Allreduce
+  - *PreProcessing:* Получают размер вектора через MPI_Bcast, получают свой блок данных через MPI_Scatterv
+  - *Run:* Обрабатывают свой блок полученных данных, участвуют в MPI_Allreduce
   - *PostProcessing:* Проверяют корректность результата
 
-Преимущества: минимальная коммуникация, явное разделение данных в PreProcessing, корректное разделение этапов pipeline, отсутствие передачи данных вектора.
+Преимущества: явное распределение данных через MPI_Scatterv, автоматическая балансировка нагрузки, правильное разделение этапов pipeline.
 
 ## 5. Детали реализации
 
@@ -113,8 +120,8 @@ end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
 
 **Методы:**
 - `ValidationImpl()` - проверка входных данных (N > 0)
-- `PreProcessingImpl()` - распределение данных: процесс 0 получает размер вектора из входных данных, размер рассылается всем процессам через `MPI_Bcast`, затем каждый процесс вычисляет границы своего блока данных (data split)
-- `RunImpl()` - основной алгоритм: каждый процесс вычисляет локальный максимум в своём блоке используя границы из PreProcessing, затем через `MPI_Allreduce` находится глобальный максимум
+- `PreProcessingImpl()` - распределение данных: процесс 0 генерирует полный вектор и распределяет его между процессами через `MPI_Scatterv`, размер вектора рассылается через `MPI_Bcast`
+- `RunImpl()` - основной алгоритм: каждый процесс вычисляет локальный максимум в своём блоке полученных данных, затем через `MPI_Allreduce` находится глобальный максимум
 - `PostProcessingImpl()` - проверка результата
 
 ### Граничные случаи
@@ -126,8 +133,10 @@ end[rank] = start[rank] + chunk_size + (rank < remainder ? 1 : 0)
 ### Использование памяти
 
 - Последовательная версия: O(1)
-- Параллельная версия: O(1) на процесс
-- Массив данных не хранится в памяти
+- Параллельная версия: 
+  - Процесс 0: O(N) для генерации полного вектора + O(N/P) для локального блока
+  - Процессы 1...P-1: O(N/P) для локального блока
+  - Временная память для send_counts и displacements: O(P)
 
 ## 6. Экспериментальная установка
 
@@ -287,7 +296,7 @@ bool DergachevAMaxElemVecSEQ::RunImpl() {
 
 **Параллельная версия (MPI):**
 
-*PreProcessing - распределение размера вектора:*
+*PreProcessing - генерация и распределение данных через MPI_Scatterv:*
 
 ```cpp
 bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
@@ -298,20 +307,33 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
 
   if (process_rank == 0) {
     vector_size_ = GetInput();
-    if (vector_size_ <= 0) {
-      return false;
-    }
+    if (vector_size_ <= 0) return false;
   }
-
   MPI_Bcast(&vector_size_, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   const int base_chunk_size = vector_size_ / total_processes;
-  const int remainder_elements = vector_size_ % total_processes;
+  const int remainder = vector_size_ % total_processes;
+  
+  std::vector<int> send_counts(total_processes);
+  std::vector<int> displacements(total_processes);
+  
+  for (int i = 0; i < total_processes; ++i) {
+    send_counts[i] = base_chunk_size + (i < remainder ? 1 : 0);
+    displacements[i] = i * base_chunk_size + std::min(i, remainder);
+  }
 
-  start_index_ = (process_rank * base_chunk_size) + 
-                 std::min(process_rank, remainder_elements);
-  end_index_ = start_index_ + base_chunk_size + 
-               (process_rank < remainder_elements ? 1 : 0);
+  std::vector<InType> full_data;
+  if (process_rank == 0) {
+    full_data.resize(vector_size_);
+    for (int idx = 0; idx < vector_size_; ++idx) {
+      full_data[idx] = ((idx * 7) % 2000) - 1000;
+    }
+  }
+
+  local_data_.resize(send_counts[process_rank]);
+  MPI_Scatterv(full_data.data(), send_counts.data(), 
+               displacements.data(), MPI_INT, local_data_.data(),
+               send_counts[process_rank], MPI_INT, 0, MPI_COMM_WORLD);
 
   return true;
 }
@@ -321,15 +343,13 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
 
 ```cpp
 bool DergachevAMaxElemVecMPI::RunImpl() {
-  if (vector_size_ <= 0) {
+  if (local_data_.empty()) {
     return false;
   }
 
   InType local_maximum = std::numeric_limits<InType>::min();
-  
-  for (int idx = start_index_; idx < end_index_; ++idx) {
-    const InType element_value = ((idx * 7) % 2000) - 1000;
-    local_maximum = std::max(element_value, local_maximum);
+  for (const auto& value : local_data_) {
+    local_maximum = std::max(value, local_maximum);
   }
 
   InType global_maximum = std::numeric_limits<InType>::min();

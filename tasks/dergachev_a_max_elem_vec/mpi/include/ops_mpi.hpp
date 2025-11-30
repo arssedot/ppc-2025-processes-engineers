@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
 #include "task/include/task.hpp"
 
@@ -19,8 +21,7 @@ class DergachevAMaxElemVecMPI : public BaseTask {
   bool PostProcessingImpl() override;
 
   int vector_size_ = 0;
-  int start_index_ = 0;
-  int end_index_ = 0;
+  std::vector<InType> local_data_;
 };
 
 }  // namespace dergachev_a_max_elem_vec

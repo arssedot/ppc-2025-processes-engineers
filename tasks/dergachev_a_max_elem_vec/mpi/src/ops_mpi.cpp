@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <vector>
 
 #include "dergachev_a_max_elem_vec/common/include/common.hpp"
 
@@ -41,24 +42,40 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
   MPI_Bcast(&vector_size_, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   const int base_chunk_size = vector_size_ / total_processes;
-  const int remainder_elements = vector_size_ % total_processes;
+  const int remainder = vector_size_ % total_processes;
 
-  start_index_ = (process_rank * base_chunk_size) + std::min(process_rank, remainder_elements);
-  end_index_ = start_index_ + base_chunk_size + (process_rank < remainder_elements ? 1 : 0);
+  std::vector<int> send_counts(total_processes);
+  std::vector<int> displacements(total_processes);
+
+  for (int i = 0; i < total_processes; ++i) {
+    send_counts[i] = base_chunk_size + (i < remainder ? 1 : 0);
+    displacements[i] = i * base_chunk_size + std::min(i, remainder);
+  }
+  
+  std::vector<InType> full_data;
+  if (process_rank == 0) {
+    full_data.resize(vector_size_);
+    for (int idx = 0; idx < vector_size_; ++idx) {
+      full_data[idx] = ((idx * 7) % 2000) - 1000;
+    }
+  }
+  
+  local_data_.resize(send_counts[process_rank]);
+
+  MPI_Scatterv(full_data.data(), send_counts.data(), displacements.data(), MPI_INT, local_data_.data(),
+               send_counts[process_rank], MPI_INT, 0, MPI_COMM_WORLD);
 
   return true;
 }
 
 bool DergachevAMaxElemVecMPI::RunImpl() {
-  if (vector_size_ <= 0) {
+  if (local_data_.empty()) {
     return false;
   }
 
   InType local_maximum = std::numeric_limits<InType>::min();
-
-  for (int idx = start_index_; idx < end_index_; ++idx) {
-    const InType element_value = ((idx * 7) % 2000) - 1000;
-    local_maximum = std::max(element_value, local_maximum);
+  for (const auto& value : local_data_) {
+    local_maximum = std::max(value, local_maximum);
   }
 
   InType global_maximum = std::numeric_limits<InType>::min();
