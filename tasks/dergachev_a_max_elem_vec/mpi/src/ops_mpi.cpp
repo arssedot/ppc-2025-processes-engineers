@@ -27,7 +27,9 @@ bool DergachevAMaxElemVecMPI::ValidationImpl() {
 
 bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
   int process_rank = 0;
+  int total_processes = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
 
   if (process_rank == 0) {
     vector_size_ = GetInput();
@@ -38,28 +40,23 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
 
   MPI_Bcast(&vector_size_, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+  const int base_chunk_size = vector_size_ / total_processes;
+  const int remainder_elements = vector_size_ % total_processes;
+
+  start_index_ = (process_rank * base_chunk_size) + std::min(process_rank, remainder_elements);
+  end_index_ = start_index_ + base_chunk_size + (process_rank < remainder_elements ? 1 : 0);
+
   return true;
 }
 
 bool DergachevAMaxElemVecMPI::RunImpl() {
-  int process_rank = 0;
-  int total_processes = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &process_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
-
   if (vector_size_ <= 0) {
     return false;
   }
 
-  const int base_chunk_size = vector_size_ / total_processes;
-  const int remainder_elements = vector_size_ % total_processes;
-
-  const int start_index = (process_rank * base_chunk_size) + std::min(process_rank, remainder_elements);
-  const int end_index = start_index + base_chunk_size + (process_rank < remainder_elements ? 1 : 0);
-
   InType local_maximum = std::numeric_limits<InType>::min();
 
-  for (int idx = start_index; idx < end_index; ++idx) {
+  for (int idx = start_index_; idx < end_index_; ++idx) {
     const InType element_value = ((idx * 7) % 2000) - 1000;
     local_maximum = std::max(element_value, local_maximum);
   }

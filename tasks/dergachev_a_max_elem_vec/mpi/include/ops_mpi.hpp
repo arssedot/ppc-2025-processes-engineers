@@ -19,6 +19,8 @@ class DergachevAMaxElemVecMPI : public BaseTask {
   bool PostProcessingImpl() override;
 
   int vector_size_ = 0;
+  int start_index_ = 0;
+  int end_index_ = 0;
 };
 
 }  // namespace dergachev_a_max_elem_vec
