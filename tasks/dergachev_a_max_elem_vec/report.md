@@ -127,8 +127,8 @@
 ### Граничные случаи
 
 - **N = 1:** Работает корректно, один процесс обрабатывает элемент
-- **N < P:** Некоторые процессы получают пустые блоки
-- **N % P != 0:** Остаток распределяется между первыми процессами
+- **N < P:** Некоторые процессы получают пустые блоки данных. Они используют локальный максимум = INT_MIN и корректно участвуют в `MPI_Allreduce`, не влияя на результат
+- **N % P != 0:** Остаток распределяется между первыми процессами (процессы с рангом < remainder получают на 1 элемент больше)
 
 ### Использование памяти
 
@@ -343,11 +343,8 @@ bool DergachevAMaxElemVecMPI::PreProcessingImpl() {
 
 ```cpp
 bool DergachevAMaxElemVecMPI::RunImpl() {
-  if (local_data_.empty()) {
-    return false;
-  }
-
   InType local_maximum = std::numeric_limits<InType>::min();
+
   for (const auto& value : local_data_) {
     local_maximum = std::max(value, local_maximum);
   }
