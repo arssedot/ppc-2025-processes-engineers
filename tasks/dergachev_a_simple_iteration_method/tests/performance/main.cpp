@@ -8,18 +8,18 @@
 namespace dergachev_a_simple_iteration_method {
 
 class DergachevASimpleIterationMethodPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  const int kCount_ = 500;
+  const int kCount_ = 2500;
   InType input_data_{};
 
   void SetUp() override {
     input_data_ = kCount_;
   }
 
-  bool CheckTestOutputData(OutType &output_data) final {
+  bool CheckTestOutputData(OutType &output_data) override {
     return input_data_ == output_data;
   }
 
-  InType GetTestInputData() final {
+  InType GetTestInputData() override {
     return input_data_;
   }
 };

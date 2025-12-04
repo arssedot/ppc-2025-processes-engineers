@@ -25,11 +25,11 @@ class DergachevASimpleIterationMethodFuncTests : public ppc::util::BaseRunFuncTe
     input_data_ = std::get<0>(params);
   }
 
-  bool CheckTestOutputData(OutType &output_data) final {
+  bool CheckTestOutputData(OutType &output_data) override {
     return (input_data_ == output_data);
   }
 
-  InType GetTestInputData() final {
+  InType GetTestInputData() override {
     return input_data_;
   }
 
