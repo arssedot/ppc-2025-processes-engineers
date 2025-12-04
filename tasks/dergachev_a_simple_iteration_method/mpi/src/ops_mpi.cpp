@@ -2,8 +2,8 @@
 
 #include <mpi.h>
 
-#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <vector>
 
 #include "dergachev_a_simple_iteration_method/common/include/common.hpp"
@@ -37,6 +37,64 @@ int ComputeFinalResult(const std::vector<double> &x, int n) {
     sum += x[i];
   }
   return static_cast<int>(std::round(sum));
+}
+
+void InitializeMatrixAndVector(std::vector<double> &flat_matrix, std::vector<double> &b, int n) {
+  flat_matrix.resize(static_cast<std::size_t>(n) * n, 0.0);
+  for (int i = 0; i < n; i++) {
+    flat_matrix[(static_cast<std::size_t>(i) * n) + i] = 1.0;
+  }
+  b.resize(n, 1.0);
+}
+
+void ComputeLocalProduct(const std::vector<double> &local_matrix, const std::vector<double> &x,
+                         const std::vector<double> &local_b, std::vector<double> &local_x_new, int local_rows,
+                         int start_row, int n, double tau) {
+  for (int i = 0; i < local_rows; i++) {
+    double ax_i = 0.0;
+    for (int j = 0; j < n; j++) {
+      ax_i += local_matrix[(static_cast<std::size_t>(i) * n) + j] * x[j];
+    }
+    local_x_new[i] = x[start_row + i] - (tau * (ax_i - local_b[i]));
+  }
+}
+
+void GatherResults(const std::vector<double> &local_x_new, std::vector<double> &x_new,
+                   const std::vector<int> &row_counts, const std::vector<int> &row_displs, int rank, int size,
+                   int local_rows, int start_row) {
+  if (rank == 0) {
+    for (int i = 0; i < local_rows; i++) {
+      x_new[start_row + i] = local_x_new[i];
+    }
+    for (int proc = 1; proc < size; proc++) {
+      MPI_Recv(x_new.data() + row_displs[proc], row_counts[proc], MPI_DOUBLE, proc, 0, MPI_COMM_WORLD,
+               MPI_STATUS_IGNORE);
+    }
+  } else {
+    MPI_Send(local_x_new.data(), local_rows, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+  }
+}
+
+double ComputeLocalDiff(const std::vector<double> &x_new, const std::vector<double> &x, int local_rows, int start_row) {
+  double local_diff = 0.0;
+  for (int i = 0; i < local_rows; i++) {
+    double d = x_new[start_row + i] - x[start_row + i];
+    local_diff += d * d;
+  }
+  return local_diff;
+}
+
+int CheckConvergence(double local_diff, double epsilon, int rank) {
+  double global_diff = 0.0;
+  MPI_Reduce(&local_diff, &global_diff, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  int converged = 0;
+  if (rank == 0) {
+    global_diff = std::sqrt(global_diff);
+    converged = (global_diff < epsilon) ? 1 : 0;
+  }
+  MPI_Bcast(&converged, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  return converged;
 }
 
 }  // namespace
@@ -101,14 +159,10 @@ bool DergachevASimpleIterationMethodMPI::RunImpl() {
   std::vector<double> x(n, 0.0);
 
   if (rank == 0) {
-    flat_matrix.resize(static_cast<size_t>(n) * n, 0.0);
-    for (int i = 0; i < n; i++) {
-      flat_matrix[static_cast<size_t>(i) * n + i] = 1.0;
-    }
-    b.resize(n, 1.0);
+    InitializeMatrixAndVector(flat_matrix, b, n);
   }
 
-  std::vector<double> local_matrix(static_cast<size_t>(local_rows) * n, 0.0);
+  std::vector<double> local_matrix(static_cast<std::size_t>(local_rows) * n, 0.0);
   MPI_Scatterv(flat_matrix.data(), matrix_counts.data(), matrix_displs.data(), MPI_DOUBLE, local_matrix.data(),
                local_rows * n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
@@ -124,43 +178,12 @@ bool DergachevASimpleIterationMethodMPI::RunImpl() {
   std::vector<double> x_new(n, 0.0);
 
   for (int iteration = 0; iteration < max_iterations; iteration++) {
-    for (int i = 0; i < local_rows; i++) {
-      double ax_i = 0.0;
-      for (int j = 0; j < n; j++) {
-        ax_i += local_matrix[static_cast<size_t>(i) * n + j] * x[j];
-      }
-      local_x_new[i] = x[start_row + i] - (tau * (ax_i - local_b[i]));
-    }
-
-    if (rank == 0) {
-      for (int i = 0; i < local_rows; i++) {
-        x_new[start_row + i] = local_x_new[i];
-      }
-      for (int proc = 1; proc < size; proc++) {
-        MPI_Recv(x_new.data() + row_displs[proc], row_counts[proc], MPI_DOUBLE, proc, 0, MPI_COMM_WORLD,
-                 MPI_STATUS_IGNORE);
-      }
-    } else {
-      MPI_Send(local_x_new.data(), local_rows, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-    }
-
+    ComputeLocalProduct(local_matrix, x, local_b, local_x_new, local_rows, start_row, n, tau);
+    GatherResults(local_x_new, x_new, row_counts, row_displs, rank, size, local_rows, start_row);
     MPI_Bcast(x_new.data(), n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    double local_diff = 0.0;
-    for (int i = 0; i < local_rows; i++) {
-      double d = x_new[start_row + i] - x[start_row + i];
-      local_diff += d * d;
-    }
-
-    double global_diff = 0.0;
-    MPI_Reduce(&local_diff, &global_diff, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-
-    int converged = 0;
-    if (rank == 0) {
-      global_diff = std::sqrt(global_diff);
-      converged = (global_diff < epsilon) ? 1 : 0;
-    }
-    MPI_Bcast(&converged, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    double local_diff = ComputeLocalDiff(x_new, x, local_rows, start_row);
+    int converged = CheckConvergence(local_diff, epsilon, rank);
 
     x = x_new;
 
