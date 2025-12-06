@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numeric>
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
@@ -62,9 +63,7 @@ bool DergachevAMultistep2dParallelSEQ::RunImpl() {
 
   for (int iter = 0; iter < input.max_iterations; ++iter) {
     std::vector<std::size_t> indices(t_values_.size());
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-      indices[i] = i;
-    }
+    std::iota(indices.begin(), indices.end(), 0);
     std::sort(indices.begin(), indices.end(),
               [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
 

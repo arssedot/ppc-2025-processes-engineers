@@ -6,11 +6,58 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <numeric>
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
 
 namespace dergachev_a_multistep_2d_parallel {
+
+namespace {
+
+void ComputeDistribution(int num_intervals, int world_size, std::vector<int> &counts, std::vector<int> &displs) {
+  counts.resize(static_cast<std::size_t>(world_size));
+  displs.resize(static_cast<std::size_t>(world_size));
+
+  int base_count = num_intervals / world_size;
+  int remainder = num_intervals % world_size;
+
+  for (int i = 0; i < world_size; ++i) {
+    auto idx = static_cast<std::size_t>(i);
+    counts[idx] = base_count + ((i < remainder) ? 1 : 0);
+    displs[idx] = (i == 0) ? 0 : (displs[idx - 1] + counts[idx - 1]);
+  }
+}
+
+void PrepareIntervalData(const std::vector<double> &t_values, const std::vector<TrialPoint> &trials, int num_intervals,
+                         std::vector<double> &interval_data) {
+  interval_data.resize(static_cast<std::size_t>(num_intervals) * 4);
+  for (int i = 0; i < num_intervals; ++i) {
+    auto idx = static_cast<std::size_t>(i);
+    interval_data[(idx * 4)] = t_values[idx];
+    interval_data[(idx * 4) + 1] = t_values[idx + 1];
+    interval_data[(idx * 4) + 2] = trials[idx].z;
+    interval_data[(idx * 4) + 3] = trials[idx + 1].z;
+  }
+}
+
+void ComputeLocalCharacteristics(const std::vector<double> &local_interval_data, int local_count, double m_val,
+                                 std::vector<double> &local_chars) {
+  local_chars.resize(static_cast<std::size_t>(local_count));
+  for (int i = 0; i < local_count; ++i) {
+    auto idx = static_cast<std::size_t>(i);
+    double t_i = local_interval_data[(idx * 4)];
+    double t_i1 = local_interval_data[(idx * 4) + 1];
+    double z_i = local_interval_data[(idx * 4) + 2];
+    double z_i1 = local_interval_data[(idx * 4) + 3];
+
+    double delta = t_i1 - t_i;
+    double diff = z_i1 - z_i;
+    local_chars[idx] = (m_val * delta) + ((diff * diff) / (m_val * delta)) - (2.0 * (z_i1 + z_i));
+  }
+}
+
+}  // namespace
 
 DergachevAMultistep2dParallelMPI::DergachevAMultistep2dParallelMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
@@ -72,9 +119,7 @@ bool DergachevAMultistep2dParallelMPI::RunImpl() {
     BroadcastTrialData();
 
     std::vector<std::size_t> indices(t_values_.size());
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-      indices[i] = i;
-    }
+    std::iota(indices.begin(), indices.end(), 0);
     std::sort(indices.begin(), indices.end(),
               [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
 
@@ -179,27 +224,15 @@ void DergachevAMultistep2dParallelMPI::ComputeCharacteristicsParallel(double m_v
     return;
   }
 
-  std::vector<int> counts(static_cast<std::size_t>(world_size_));
-  std::vector<int> displs(static_cast<std::size_t>(world_size_));
+  std::vector<int> counts;
+  std::vector<int> displs;
+  ComputeDistribution(num_intervals, world_size_, counts, displs);
 
-  int base_count = num_intervals / world_size_;
-  int remainder = num_intervals % world_size_;
-
-  for (int i = 0; i < world_size_; ++i) {
-    counts[static_cast<std::size_t>(i)] = base_count + (i < remainder ? 1 : 0);
-    displs[static_cast<std::size_t>(i)] =
-        (i == 0) ? 0 : (displs[static_cast<std::size_t>(i - 1)] + counts[static_cast<std::size_t>(i - 1)]);
-  }
-
-  std::vector<double> interval_data(static_cast<std::size_t>(num_intervals) * 4);
+  std::vector<double> interval_data;
   if (world_rank_ == 0) {
-    for (int i = 0; i < num_intervals; ++i) {
-      auto idx = static_cast<std::size_t>(i);
-      interval_data[(idx * 4)] = t_values_[idx];
-      interval_data[(idx * 4) + 1] = t_values_[idx + 1];
-      interval_data[(idx * 4) + 2] = trials_[idx].z;
-      interval_data[(idx * 4) + 3] = trials_[idx + 1].z;
-    }
+    PrepareIntervalData(t_values_, trials_, num_intervals, interval_data);
+  } else {
+    interval_data.resize(static_cast<std::size_t>(num_intervals) * 4);
   }
 
   std::vector<int> send_counts(static_cast<std::size_t>(world_size_));
@@ -215,35 +248,35 @@ void DergachevAMultistep2dParallelMPI::ComputeCharacteristicsParallel(double m_v
   MPI_Scatterv(interval_data.data(), send_counts.data(), send_displs.data(), MPI_DOUBLE, local_interval_data.data(),
                local_count * 4, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-  std::vector<double> local_chars(static_cast<std::size_t>(local_count));
-  for (int i = 0; i < local_count; ++i) {
-    auto idx = static_cast<std::size_t>(i);
-    double t_i = local_interval_data[(idx * 4)];
-    double t_i1 = local_interval_data[(idx * 4) + 1];
-    double z_i = local_interval_data[(idx * 4) + 2];
-    double z_i1 = local_interval_data[(idx * 4) + 3];
-
-    double delta = t_i1 - t_i;
-    double diff = z_i1 - z_i;
-    local_chars[idx] = (m_val * delta) + ((diff * diff) / (m_val * delta)) - (2.0 * (z_i1 + z_i));
-  }
+  std::vector<double> local_chars;
+  ComputeLocalCharacteristics(local_interval_data, local_count, m_val, local_chars);
 
   characteristics.resize(static_cast<std::size_t>(num_intervals));
+  GatherResults(local_chars, counts, displs, characteristics);
+
+  MPI_Bcast(characteristics.data(), num_intervals, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+}
+
+void DergachevAMultistep2dParallelMPI::GatherResults(const std::vector<double> &local_chars,
+                                                     const std::vector<int> &counts, const std::vector<int> &displs,
+                                                     std::vector<double> &characteristics) {
+  int local_count = counts[static_cast<std::size_t>(world_rank_)];
 
   if (world_rank_ == 0) {
-    int count0 = counts[0];
-    for (int i = 0; i < count0; ++i) {
+    for (int i = 0; i < counts[0]; ++i) {
       characteristics[static_cast<std::size_t>(i)] = local_chars[static_cast<std::size_t>(i)];
     }
 
     for (int proc = 1; proc < world_size_; ++proc) {
-      int proc_count = counts[static_cast<std::size_t>(proc)];
+      auto proc_idx = static_cast<std::size_t>(proc);
+      int proc_count = counts[proc_idx];
       if (proc_count > 0) {
         std::vector<double> recv_chars(static_cast<std::size_t>(proc_count));
         MPI_Recv(recv_chars.data(), proc_count, MPI_DOUBLE, proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        int disp = displs[static_cast<std::size_t>(proc)];
+        int disp = displs[proc_idx];
         for (int i = 0; i < proc_count; ++i) {
-          characteristics[static_cast<std::size_t>(disp + i)] = recv_chars[static_cast<std::size_t>(i)];
+          characteristics[static_cast<std::size_t>(disp) + static_cast<std::size_t>(i)] =
+              recv_chars[static_cast<std::size_t>(i)];
         }
       }
     }
@@ -252,8 +285,6 @@ void DergachevAMultistep2dParallelMPI::ComputeCharacteristicsParallel(double m_v
       MPI_Send(local_chars.data(), local_count, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     }
   }
-
-  MPI_Bcast(characteristics.data(), num_intervals, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 }
 
 int DergachevAMultistep2dParallelMPI::SelectBestInterval(const std::vector<double> &characteristics) {
