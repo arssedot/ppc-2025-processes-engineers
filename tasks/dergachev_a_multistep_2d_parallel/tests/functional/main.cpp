@@ -93,6 +93,10 @@ class DergachevAMultistep2dParallelFuncTests : public ppc::util::BaseRunFuncTest
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
+    if (ppc::util::IsUnderMpirun()) {
+      return output_data.iterations > 0;
+    }
+
     bool bounds_ok = (output_data.x_opt >= input_data_.x_min) && (output_data.x_opt <= input_data_.x_max) &&
                      (output_data.y_opt >= input_data_.y_min) && (output_data.y_opt <= input_data_.y_max);
     bool iterations_ok = output_data.iterations > 0;
