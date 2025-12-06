@@ -4,7 +4,6 @@
 #include <functional>
 #include <string>
 #include <tuple>
-#include <vector>
 
 #include "task/include/task.hpp"
 
@@ -12,33 +11,25 @@ namespace dergachev_a_multistep_2d_parallel {
 
 struct OptimizationInput {
   std::function<double(double, double)> func;
-  double x_min;
-  double x_max;
-  double y_min;
-  double y_max;
-  double epsilon;
-  double r_param;
-  int max_iterations;
+  double x_min{0.0};
+  double x_max{1.0};
+  double y_min{0.0};
+  double y_max{1.0};
+  double epsilon{0.01};
+  double r_param{2.0};
+  int max_iterations{1000};
 
-  OptimizationInput()
-      : func(nullptr),
-        x_min(0.0),
-        x_max(1.0),
-        y_min(0.0),
-        y_max(1.0),
-        epsilon(0.01),
-        r_param(2.0),
-        max_iterations(1000) {}
+  OptimizationInput() : func(nullptr) {}
 };
 
 struct OptimizationResult {
-  double x_opt;
-  double y_opt;
-  double func_min;
-  int iterations;
-  bool converged;
+  double x_opt{0.0};
+  double y_opt{0.0};
+  double func_min{0.0};
+  int iterations{0};
+  bool converged{false};
 
-  OptimizationResult() : x_opt(0.0), y_opt(0.0), func_min(0.0), iterations(0), converged(false) {}
+  OptimizationResult() = default;
 
   bool operator==(const OptimizationResult &other) const {
     const double tol = 1e-3;
@@ -48,11 +39,11 @@ struct OptimizationResult {
 };
 
 struct TrialPoint {
-  double x;
-  double y;
-  double z;
+  double x{0.0};
+  double y{0.0};
+  double z{0.0};
 
-  TrialPoint() : x(0.0), y(0.0), z(0.0) {}
+  TrialPoint() = default;
   TrialPoint(double px, double py, double pz) : x(px), y(py), z(pz) {}
 
   bool operator<(const TrialPoint &other) const {
@@ -64,11 +55,11 @@ struct TrialPoint {
 };
 
 struct Interval {
-  int left_idx;
-  int right_idx;
-  double characteristic;
+  int left_idx{0};
+  int right_idx{0};
+  double characteristic{0.0};
 
-  Interval() : left_idx(0), right_idx(0), characteristic(0.0) {}
+  Interval() = default;
   Interval(int l, int r, double c) : left_idx(l), right_idx(r), characteristic(c) {}
 };
 
@@ -89,7 +80,7 @@ inline void PeanoMap(double t, int level, double &x, double &y) {
 
   for (int i = 0; i < level; ++i) {
     int quadrant = static_cast<int>(t * 4.0);
-    t = t * 4.0 - quadrant;
+    t = (t * 4.0) - quadrant;
 
     double tx = 0.0;
     double ty = 0.0;
@@ -127,14 +118,14 @@ inline double PeanoToX(double t, double x_min, double x_max, double /*y_min*/, d
   double x = 0.0;
   double y = 0.0;
   detail::PeanoMap(t, level, x, y);
-  return x_min + x * (x_max - x_min);
+  return x_min + (x * (x_max - x_min));
 }
 
 inline double PeanoToY(double t, double /*x_min*/, double /*x_max*/, double y_min, double y_max, int level) {
   double x = 0.0;
   double y = 0.0;
   detail::PeanoMap(t, level, x, y);
-  return y_min + y * (y_max - y_min);
+  return y_min + (y * (y_max - y_min));
 }
 
 }  // namespace dergachev_a_multistep_2d_parallel

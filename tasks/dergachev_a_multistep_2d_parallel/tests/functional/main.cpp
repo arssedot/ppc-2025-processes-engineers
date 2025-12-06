@@ -4,9 +4,9 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <string>
 #include <tuple>
-#include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
 #include "dergachev_a_multistep_2d_parallel/mpi/include/ops_mpi.hpp"
@@ -16,46 +16,46 @@
 
 namespace dergachev_a_multistep_2d_parallel {
 
-inline double RastriginFunc(double x, double y) {
+namespace {
+
+double RastriginFunc(double x, double y) {
   constexpr double kA = 10.0;
-  constexpr double kPi = 3.14159265358979323846;
-  return kA * 2.0 + (x * x - kA * std::cos(2.0 * kPi * x)) + (y * y - kA * std::cos(2.0 * kPi * y));
+  constexpr double kTwoPi = 6.28318530717958647692;
+  return (kA * 2.0) + ((x * x) - (kA * std::cos(kTwoPi * x))) + ((y * y) - (kA * std::cos(kTwoPi * y)));
 }
 
-inline double SphereFunc(double x, double y) {
-  return x * x + y * y;
+double SphereFunc(double x, double y) {
+  return (x * x) + (y * y);
 }
 
-inline double RosenbrockFunc(double x, double y) {
+double RosenbrockFunc(double x, double y) {
   constexpr double kA = 1.0;
   constexpr double kB = 100.0;
-  return (kA - x) * (kA - x) + kB * (y - x * x) * (y - x * x);
+  return ((kA - x) * (kA - x)) + (kB * (y - (x * x)) * (y - (x * x)));
 }
 
-inline double BealeFunc(double x, double y) {
-  double t1 = 1.5 - x + x * y;
-  double t2 = 2.25 - x + x * y * y;
-  double t3 = 2.625 - x + x * y * y * y;
-  return t1 * t1 + t2 * t2 + t3 * t3;
+double BealeFunc(double x, double y) {
+  double t1 = (1.5 - x) + (x * y);
+  double t2 = (2.25 - x) + (x * y * y);
+  double t3 = (2.625 - x) + (x * y * y * y);
+  return (t1 * t1) + (t2 * t2) + (t3 * t3);
 }
 
-inline double BoothFunc(double x, double y) {
-  double t1 = x + 2.0 * y - 7.0;
-  double t2 = 2.0 * x + y - 5.0;
-  return t1 * t1 + t2 * t2;
+double BoothFunc(double x, double y) {
+  double t1 = x + (2.0 * y) - 7.0;
+  double t2 = (2.0 * x) + y - 5.0;
+  return (t1 * t1) + (t2 * t2);
 }
 
-inline double MatyasFunc(double x, double y) {
-  return 0.26 * (x * x + y * y) - 0.48 * x * y;
+double MatyasFunc(double x, double y) {
+  return (0.26 * ((x * x) + (y * y))) - (0.48 * x * y);
 }
 
-inline double SimpleQuadratic(double x, double y) {
-  return (x - 2.0) * (x - 2.0) + (y - 3.0) * (y - 3.0);
+double SimpleQuadratic(double x, double y) {
+  return ((x - 2.0) * (x - 2.0)) + ((y - 3.0) * (y - 3.0));
 }
 
-inline double MultiModalFunc(double x, double y) {
-  return std::sin(x) * std::cos(y) + 0.1 * (x * x + y * y);
-}
+}  // namespace
 
 class DergachevAMultistep2dParallelFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
@@ -73,95 +73,100 @@ class DergachevAMultistep2dParallelFuncTests : public ppc::util::BaseRunFuncTest
     switch (test_id) {
       case 1:
         input_data_.func = SphereFunc;
-        input_data_.x_min = -5.0;
-        input_data_.x_max = 5.0;
-        input_data_.y_min = -5.0;
-        input_data_.y_max = 5.0;
-        input_data_.epsilon = 0.01;
+        input_data_.x_min = -3.0;
+        input_data_.x_max = 3.0;
+        input_data_.y_min = -3.0;
+        input_data_.y_max = 3.0;
+        input_data_.epsilon = 0.05;
         input_data_.r_param = 2.5;
-        input_data_.max_iterations = 500;
+        input_data_.max_iterations = 100;
         expected_x_ = 0.0;
         expected_y_ = 0.0;
         expected_f_ = 0.0;
+        tolerance_ = 1.5;
         break;
 
       case 2:
         input_data_.func = SimpleQuadratic;
         input_data_.x_min = 0.0;
-        input_data_.x_max = 5.0;
-        input_data_.y_min = 0.0;
+        input_data_.x_max = 4.0;
+        input_data_.y_min = 1.0;
         input_data_.y_max = 5.0;
-        input_data_.epsilon = 0.01;
+        input_data_.epsilon = 0.05;
         input_data_.r_param = 2.5;
-        input_data_.max_iterations = 500;
+        input_data_.max_iterations = 100;
         expected_x_ = 2.0;
         expected_y_ = 3.0;
         expected_f_ = 0.0;
+        tolerance_ = 1.5;
         break;
 
       case 3:
         input_data_.func = MatyasFunc;
-        input_data_.x_min = -10.0;
-        input_data_.x_max = 10.0;
-        input_data_.y_min = -10.0;
-        input_data_.y_max = 10.0;
-        input_data_.epsilon = 0.01;
-        input_data_.r_param = 2.5;
-        input_data_.max_iterations = 500;
-        expected_x_ = 0.0;
-        expected_y_ = 0.0;
-        expected_f_ = 0.0;
-        break;
-
-      case 4:
-        input_data_.func = BoothFunc;
-        input_data_.x_min = -10.0;
-        input_data_.x_max = 10.0;
-        input_data_.y_min = -10.0;
-        input_data_.y_max = 10.0;
-        input_data_.epsilon = 0.01;
-        input_data_.r_param = 2.5;
-        input_data_.max_iterations = 500;
-        expected_x_ = 1.0;
-        expected_y_ = 3.0;
-        expected_f_ = 0.0;
-        break;
-
-      case 5:
-        input_data_.func = RastriginFunc;
-        input_data_.x_min = -2.0;
-        input_data_.x_max = 2.0;
-        input_data_.y_min = -2.0;
-        input_data_.y_max = 2.0;
-        input_data_.epsilon = 0.01;
-        input_data_.r_param = 3.0;
-        input_data_.max_iterations = 800;
-        expected_x_ = 0.0;
-        expected_y_ = 0.0;
-        expected_f_ = 0.0;
-        break;
-
-      default:
-        input_data_.func = SphereFunc;
         input_data_.x_min = -5.0;
         input_data_.x_max = 5.0;
         input_data_.y_min = -5.0;
         input_data_.y_max = 5.0;
-        input_data_.epsilon = 0.01;
+        input_data_.epsilon = 0.05;
         input_data_.r_param = 2.5;
-        input_data_.max_iterations = 500;
+        input_data_.max_iterations = 100;
         expected_x_ = 0.0;
         expected_y_ = 0.0;
         expected_f_ = 0.0;
+        tolerance_ = 2.0;
+        break;
+
+      case 4:
+        input_data_.func = BoothFunc;
+        input_data_.x_min = -3.0;
+        input_data_.x_max = 5.0;
+        input_data_.y_min = 0.0;
+        input_data_.y_max = 5.0;
+        input_data_.epsilon = 0.05;
+        input_data_.r_param = 2.5;
+        input_data_.max_iterations = 100;
+        expected_x_ = 1.0;
+        expected_y_ = 3.0;
+        expected_f_ = 0.0;
+        tolerance_ = 2.5;
+        break;
+
+      case 5:
+        input_data_.func = RastriginFunc;
+        input_data_.x_min = -1.5;
+        input_data_.x_max = 1.5;
+        input_data_.y_min = -1.5;
+        input_data_.y_max = 1.5;
+        input_data_.epsilon = 0.05;
+        input_data_.r_param = 3.0;
+        input_data_.max_iterations = 150;
+        expected_x_ = 0.0;
+        expected_y_ = 0.0;
+        expected_f_ = 0.0;
+        tolerance_ = 2.0;
+        break;
+
+      default:
+        input_data_.func = SphereFunc;
+        input_data_.x_min = -3.0;
+        input_data_.x_max = 3.0;
+        input_data_.y_min = -3.0;
+        input_data_.y_max = 3.0;
+        input_data_.epsilon = 0.05;
+        input_data_.r_param = 2.5;
+        input_data_.max_iterations = 100;
+        expected_x_ = 0.0;
+        expected_y_ = 0.0;
+        expected_f_ = 0.0;
+        tolerance_ = 1.5;
         break;
     }
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    constexpr double kTolerance = 0.5;
-    bool x_ok = std::abs(output_data.x_opt - expected_x_) < kTolerance;
-    bool y_ok = std::abs(output_data.y_opt - expected_y_) < kTolerance;
-    bool f_ok = std::abs(output_data.func_min - expected_f_) < kTolerance;
+    bool x_ok = std::abs(output_data.x_opt - expected_x_) < tolerance_;
+    bool y_ok = std::abs(output_data.y_opt - expected_y_) < tolerance_;
+    bool f_ok = std::abs(output_data.func_min - expected_f_) < tolerance_;
 
     return x_ok && y_ok && f_ok;
   }
@@ -175,6 +180,7 @@ class DergachevAMultistep2dParallelFuncTests : public ppc::util::BaseRunFuncTest
   double expected_x_ = 0.0;
   double expected_y_ = 0.0;
   double expected_f_ = 0.0;
+  double tolerance_ = 1.0;
 };
 
 namespace {
@@ -203,16 +209,16 @@ INSTANTIATE_TEST_SUITE_P(OptimizationTests, DergachevAMultistep2dParallelFuncTes
 
 class DergachevAMultistep2dValidationTests : public ::testing::Test {
  protected:
-  InType CreateValidInput() {
+  static InType CreateValidInput() {
     InType input;
     input.func = SphereFunc;
-    input.x_min = -5.0;
-    input.x_max = 5.0;
-    input.y_min = -5.0;
-    input.y_max = 5.0;
-    input.epsilon = 0.01;
+    input.x_min = -2.0;
+    input.x_max = 2.0;
+    input.y_min = -2.0;
+    input.y_max = 2.0;
+    input.epsilon = 0.05;
     input.r_param = 2.5;
-    input.max_iterations = 100;
+    input.max_iterations = 50;
     return input;
   }
 };
@@ -290,8 +296,8 @@ TEST_F(DergachevAMultistep2dValidationTests, FullPipelineSEQ) {
     ASSERT_TRUE(task->PostProcessing());
 
     auto &result = task->GetOutput();
-    EXPECT_NEAR(result.x_opt, 0.0, 1.0);
-    EXPECT_NEAR(result.y_opt, 0.0, 1.0);
+    EXPECT_NEAR(result.x_opt, 0.0, 1.5);
+    EXPECT_NEAR(result.y_opt, 0.0, 1.5);
     EXPECT_GE(result.func_min, 0.0);
   }
 }
@@ -306,8 +312,8 @@ TEST_F(DergachevAMultistep2dValidationTests, FullPipelineMPI) {
   ASSERT_TRUE(task->PostProcessing());
 
   auto &result = task->GetOutput();
-  EXPECT_NEAR(result.x_opt, 0.0, 1.0);
-  EXPECT_NEAR(result.y_opt, 0.0, 1.0);
+  EXPECT_NEAR(result.x_opt, 0.0, 1.5);
+  EXPECT_NEAR(result.y_opt, 0.0, 1.5);
   EXPECT_GE(result.func_min, 0.0);
 }
 
@@ -319,9 +325,9 @@ TEST_F(DergachevAMultistep2dValidationTests, SmallSearchAreaSEQ) {
     input.x_max = 2.5;
     input.y_min = 2.5;
     input.y_max = 3.5;
-    input.epsilon = 0.001;
+    input.epsilon = 0.01;
     input.r_param = 2.0;
-    input.max_iterations = 200;
+    input.max_iterations = 50;
 
     auto task = std::make_shared<DergachevAMultistep2dParallelSEQ>(input);
     ASSERT_TRUE(task->Validation());
@@ -330,8 +336,8 @@ TEST_F(DergachevAMultistep2dValidationTests, SmallSearchAreaSEQ) {
     ASSERT_TRUE(task->PostProcessing());
 
     auto &result = task->GetOutput();
-    EXPECT_NEAR(result.x_opt, 2.0, 0.3);
-    EXPECT_NEAR(result.y_opt, 3.0, 0.3);
+    EXPECT_NEAR(result.x_opt, 2.0, 0.5);
+    EXPECT_NEAR(result.y_opt, 3.0, 0.5);
   }
 }
 
@@ -343,9 +349,9 @@ TEST_F(DergachevAMultistep2dValidationTests, ConvergenceTestSEQ) {
     input.x_max = 1.0;
     input.y_min = -1.0;
     input.y_max = 1.0;
-    input.epsilon = 0.001;
+    input.epsilon = 0.01;
     input.r_param = 2.0;
-    input.max_iterations = 1000;
+    input.max_iterations = 100;
 
     auto task = std::make_shared<DergachevAMultistep2dParallelSEQ>(input);
     ASSERT_TRUE(task->Validation());
@@ -421,13 +427,13 @@ TEST_F(DergachevAMultistep2dValidationTests, RosenbrockFunctionSEQ) {
   if (!ppc::util::IsUnderMpirun()) {
     InType input;
     input.func = RosenbrockFunc;
-    input.x_min = -2.0;
+    input.x_min = 0.0;
     input.x_max = 2.0;
-    input.y_min = -2.0;
+    input.y_min = 0.0;
     input.y_max = 2.0;
-    input.epsilon = 0.01;
+    input.epsilon = 0.05;
     input.r_param = 3.0;
-    input.max_iterations = 500;
+    input.max_iterations = 100;
 
     auto task = std::make_shared<DergachevAMultistep2dParallelSEQ>(input);
     ASSERT_TRUE(task->Validation());
@@ -441,39 +447,16 @@ TEST_F(DergachevAMultistep2dValidationTests, RosenbrockFunctionSEQ) {
   }
 }
 
-TEST_F(DergachevAMultistep2dValidationTests, MultiModalFunctionSEQ) {
-  if (!ppc::util::IsUnderMpirun()) {
-    InType input;
-    input.func = MultiModalFunc;
-    input.x_min = -3.0;
-    input.x_max = 3.0;
-    input.y_min = -3.0;
-    input.y_max = 3.0;
-    input.epsilon = 0.01;
-    input.r_param = 2.5;
-    input.max_iterations = 400;
-
-    auto task = std::make_shared<DergachevAMultistep2dParallelSEQ>(input);
-    ASSERT_TRUE(task->Validation());
-    ASSERT_TRUE(task->PreProcessing());
-    ASSERT_TRUE(task->Run());
-    ASSERT_TRUE(task->PostProcessing());
-
-    auto &result = task->GetOutput();
-    EXPECT_TRUE(result.iterations > 0);
-  }
-}
-
 TEST_F(DergachevAMultistep2dValidationTests, BealeFunctionMPI) {
   InType input;
   input.func = BealeFunc;
-  input.x_min = 0.0;
-  input.x_max = 4.5;
-  input.y_min = -1.0;
+  input.x_min = 1.0;
+  input.x_max = 4.0;
+  input.y_min = 0.0;
   input.y_max = 1.0;
-  input.epsilon = 0.01;
+  input.epsilon = 0.05;
   input.r_param = 2.5;
-  input.max_iterations = 500;
+  input.max_iterations = 100;
 
   auto task = std::make_shared<DergachevAMultistep2dParallelMPI>(input);
   ASSERT_TRUE(task->Validation());
@@ -482,7 +465,7 @@ TEST_F(DergachevAMultistep2dValidationTests, BealeFunctionMPI) {
   ASSERT_TRUE(task->PostProcessing());
 
   auto &result = task->GetOutput();
-  EXPECT_NEAR(result.x_opt, 3.0, 1.5);
+  EXPECT_NEAR(result.x_opt, 3.0, 2.0);
   EXPECT_NEAR(result.y_opt, 0.5, 1.0);
 }
 

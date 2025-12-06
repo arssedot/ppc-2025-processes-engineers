@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <vector>
 
@@ -9,8 +10,7 @@
 
 namespace dergachev_a_multistep_2d_parallel {
 
-DergachevAMultistep2dParallelSEQ::DergachevAMultistep2dParallelSEQ(const InType &in)
-    : m_estimate_(1.0), peano_level_(10) {
+DergachevAMultistep2dParallelSEQ::DergachevAMultistep2dParallelSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput() = OutType();
@@ -61,15 +61,16 @@ bool DergachevAMultistep2dParallelSEQ::RunImpl() {
   auto &output = GetOutput();
 
   for (int iter = 0; iter < input.max_iterations; ++iter) {
-    std::vector<size_t> indices(t_values_.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
+    std::vector<std::size_t> indices(t_values_.size());
+    for (std::size_t i = 0; i < indices.size(); ++i) {
       indices[i] = i;
     }
-    std::sort(indices.begin(), indices.end(), [this](size_t a, size_t b) { return t_values_[a] < t_values_[b]; });
+    std::sort(indices.begin(), indices.end(),
+              [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
 
     std::vector<double> sorted_t(t_values_.size());
     std::vector<TrialPoint> sorted_trials(trials_.size());
-    for (size_t i = 0; i < indices.size(); ++i) {
+    for (std::size_t i = 0; i < indices.size(); ++i) {
       sorted_t[i] = t_values_[indices[i]];
       sorted_trials[i] = trials_[indices[i]];
     }
@@ -89,7 +90,7 @@ bool DergachevAMultistep2dParallelSEQ::RunImpl() {
     double z_right = trials_[best_idx + 1].z;
 
     double m_val = input.r_param * m_estimate_;
-    double t_new = 0.5 * (t_left + t_right) - (z_right - z_left) / (2.0 * m_val);
+    double t_new = (0.5 * (t_left + t_right)) - ((z_right - z_left) / (2.0 * m_val));
 
     t_new = std::max(t_left + 1e-12, std::min(t_new, t_right - 1e-12));
 
@@ -119,7 +120,7 @@ bool DergachevAMultistep2dParallelSEQ::PostProcessingImpl() {
   double min_z = std::numeric_limits<double>::max();
   int min_idx = 0;
 
-  for (size_t i = 0; i < trials_.size(); ++i) {
+  for (std::size_t i = 0; i < trials_.size(); ++i) {
     if (trials_[i].z < min_z) {
       min_z = trials_[i].z;
       min_idx = static_cast<int>(i);
@@ -136,14 +137,12 @@ bool DergachevAMultistep2dParallelSEQ::PostProcessingImpl() {
 double DergachevAMultistep2dParallelSEQ::ComputeLipschitzEstimate() {
   double max_slope = 0.0;
 
-  for (size_t i = 1; i < t_values_.size(); ++i) {
+  for (std::size_t i = 1; i < t_values_.size(); ++i) {
     double dt = t_values_[i] - t_values_[i - 1];
     if (dt > 1e-15) {
       double dz = std::abs(trials_[i].z - trials_[i - 1].z);
       double slope = dz / dt;
-      if (slope > max_slope) {
-        max_slope = slope;
-      }
+      max_slope = std::max(slope, max_slope);
     }
   }
 
@@ -157,8 +156,9 @@ double DergachevAMultistep2dParallelSEQ::ComputeCharacteristic(int idx, double m
   double z_i1 = trials_[idx + 1].z;
 
   double delta = t_i1 - t_i;
+  double diff = z_i1 - z_i;
 
-  double r_val = m_val * delta + ((z_i1 - z_i) * (z_i1 - z_i)) / (m_val * delta) - 2.0 * (z_i1 + z_i);
+  double r_val = (m_val * delta) + ((diff * diff) / (m_val * delta)) - (2.0 * (z_i1 + z_i));
 
   return r_val;
 }
@@ -170,7 +170,7 @@ int DergachevAMultistep2dParallelSEQ::SelectBestInterval() {
   double max_char = -std::numeric_limits<double>::max();
   int best_idx = 0;
 
-  for (size_t i = 0; i + 1 < t_values_.size(); ++i) {
+  for (std::size_t i = 0; i + 1 < t_values_.size(); ++i) {
     double characteristic = ComputeCharacteristic(static_cast<int>(i), m_val);
     if (characteristic > max_char) {
       max_char = characteristic;

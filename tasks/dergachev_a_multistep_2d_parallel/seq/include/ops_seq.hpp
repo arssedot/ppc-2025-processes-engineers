@@ -1,4 +1,5 @@
 #pragma once
+
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
@@ -26,8 +27,8 @@ class DergachevAMultistep2dParallelSEQ : public BaseTask {
 
   std::vector<TrialPoint> trials_;
   std::vector<double> t_values_;
-  double m_estimate_;
-  int peano_level_;
+  double m_estimate_{1.0};
+  int peano_level_{10};
 };
 
 }  // namespace dergachev_a_multistep_2d_parallel
