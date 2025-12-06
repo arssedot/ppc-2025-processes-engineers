@@ -20,6 +20,7 @@ class DergachevAMultistep2dParallelSEQ : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
+  void SortTrialsByT();
   double ComputeLipschitzEstimate();
   double ComputeCharacteristic(int idx, double m_val);
   int SelectBestInterval();

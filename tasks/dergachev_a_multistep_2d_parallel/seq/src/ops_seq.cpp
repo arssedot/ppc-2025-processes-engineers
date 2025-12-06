@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
-#include <numeric>
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
@@ -62,19 +61,7 @@ bool DergachevAMultistep2dParallelSEQ::RunImpl() {
   auto &output = GetOutput();
 
   for (int iter = 0; iter < input.max_iterations; ++iter) {
-    std::vector<std::size_t> indices(t_values_.size());
-    std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(),
-              [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
-
-    std::vector<double> sorted_t(t_values_.size());
-    std::vector<TrialPoint> sorted_trials(trials_.size());
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-      sorted_t[i] = t_values_[indices[i]];
-      sorted_trials[i] = trials_[indices[i]];
-    }
-    t_values_ = sorted_t;
-    trials_ = sorted_trials;
+    SortTrialsByT();
 
     m_estimate_ = ComputeLipschitzEstimate();
     if (m_estimate_ < 1e-10) {
@@ -131,6 +118,18 @@ bool DergachevAMultistep2dParallelSEQ::PostProcessingImpl() {
   output.func_min = min_z;
 
   return true;
+}
+
+void DergachevAMultistep2dParallelSEQ::SortTrialsByT() {
+  std::size_t n = t_values_.size();
+  for (std::size_t i = 0; i < n - 1; ++i) {
+    for (std::size_t j = 0; j < n - i - 1; ++j) {
+      if (t_values_[j] > t_values_[j + 1]) {
+        std::swap(t_values_[j], t_values_[j + 1]);
+        std::swap(trials_[j], trials_[j + 1]);
+      }
+    }
+  }
 }
 
 double DergachevAMultistep2dParallelSEQ::ComputeLipschitzEstimate() {

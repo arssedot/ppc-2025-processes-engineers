@@ -20,10 +20,9 @@ class DergachevAMultistep2dParallelMPI : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
+  void SortTrialsByT();
   double ComputeLipschitzEstimate();
   void ComputeCharacteristicsParallel(double m_val, std::vector<double> &characteristics);
-  void GatherResults(const std::vector<double> &local_chars, const std::vector<int> &counts,
-                     const std::vector<int> &displs, std::vector<double> &characteristics);
   static int SelectBestInterval(const std::vector<double> &characteristics);
   double PerformTrial(double t);
   void BroadcastTrialData();

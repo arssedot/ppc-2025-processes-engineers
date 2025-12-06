@@ -6,7 +6,6 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
-#include <numeric>
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
@@ -54,6 +53,36 @@ void ComputeLocalCharacteristics(const std::vector<double> &local_interval_data,
     double delta = t_i1 - t_i;
     double diff = z_i1 - z_i;
     local_chars[idx] = (m_val * delta) + ((diff * diff) / (m_val * delta)) - (2.0 * (z_i1 + z_i));
+  }
+}
+
+void GatherResultsToRoot(const std::vector<double> &local_chars, const std::vector<int> &counts,
+                         const std::vector<int> &displs, int world_rank, int world_size,
+                         std::vector<double> &characteristics) {
+  int local_count = counts[static_cast<std::size_t>(world_rank)];
+
+  if (world_rank == 0) {
+    for (int i = 0; i < counts[0]; ++i) {
+      characteristics[static_cast<std::size_t>(i)] = local_chars[static_cast<std::size_t>(i)];
+    }
+
+    for (int proc = 1; proc < world_size; ++proc) {
+      auto proc_idx = static_cast<std::size_t>(proc);
+      int proc_count = counts[proc_idx];
+      if (proc_count > 0) {
+        std::vector<double> recv_chars(static_cast<std::size_t>(proc_count));
+        MPI_Recv(recv_chars.data(), proc_count, MPI_DOUBLE, proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        int disp = displs[proc_idx];
+        for (int i = 0; i < proc_count; ++i) {
+          characteristics[static_cast<std::size_t>(disp) + static_cast<std::size_t>(i)] =
+              recv_chars[static_cast<std::size_t>(i)];
+        }
+      }
+    }
+  } else {
+    if (local_count > 0) {
+      MPI_Send(local_chars.data(), local_count, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    }
   }
 }
 
@@ -118,20 +147,7 @@ bool DergachevAMultistep2dParallelMPI::RunImpl() {
   for (int iter = 0; iter < input.max_iterations; ++iter) {
     BroadcastTrialData();
 
-    std::vector<std::size_t> indices(t_values_.size());
-    std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(),
-              [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
-
-    std::vector<double> sorted_t(t_values_.size());
-    std::vector<TrialPoint> sorted_trials(trials_.size());
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-      sorted_t[i] = t_values_[indices[i]];
-      sorted_trials[i] = trials_[indices[i]];
-    }
-
-    t_values_ = sorted_t;
-    trials_ = sorted_trials;
+    SortTrialsByT();
 
     m_estimate_ = ComputeLipschitzEstimate();
     if (m_estimate_ < 1e-10) {
@@ -201,6 +217,18 @@ bool DergachevAMultistep2dParallelMPI::PostProcessingImpl() {
   return true;
 }
 
+void DergachevAMultistep2dParallelMPI::SortTrialsByT() {
+  std::size_t n = t_values_.size();
+  for (std::size_t i = 0; i < n - 1; ++i) {
+    for (std::size_t j = 0; j < n - i - 1; ++j) {
+      if (t_values_[j] > t_values_[j + 1]) {
+        std::swap(t_values_[j], t_values_[j + 1]);
+        std::swap(trials_[j], trials_[j + 1]);
+      }
+    }
+  }
+}
+
 double DergachevAMultistep2dParallelMPI::ComputeLipschitzEstimate() {
   double max_slope = 0.0;
 
@@ -252,39 +280,9 @@ void DergachevAMultistep2dParallelMPI::ComputeCharacteristicsParallel(double m_v
   ComputeLocalCharacteristics(local_interval_data, local_count, m_val, local_chars);
 
   characteristics.resize(static_cast<std::size_t>(num_intervals));
-  GatherResults(local_chars, counts, displs, characteristics);
+  GatherResultsToRoot(local_chars, counts, displs, world_rank_, world_size_, characteristics);
 
   MPI_Bcast(characteristics.data(), num_intervals, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-}
-
-void DergachevAMultistep2dParallelMPI::GatherResults(const std::vector<double> &local_chars,
-                                                     const std::vector<int> &counts, const std::vector<int> &displs,
-                                                     std::vector<double> &characteristics) {
-  int local_count = counts[static_cast<std::size_t>(world_rank_)];
-
-  if (world_rank_ == 0) {
-    for (int i = 0; i < counts[0]; ++i) {
-      characteristics[static_cast<std::size_t>(i)] = local_chars[static_cast<std::size_t>(i)];
-    }
-
-    for (int proc = 1; proc < world_size_; ++proc) {
-      auto proc_idx = static_cast<std::size_t>(proc);
-      int proc_count = counts[proc_idx];
-      if (proc_count > 0) {
-        std::vector<double> recv_chars(static_cast<std::size_t>(proc_count));
-        MPI_Recv(recv_chars.data(), proc_count, MPI_DOUBLE, proc, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        int disp = displs[proc_idx];
-        for (int i = 0; i < proc_count; ++i) {
-          characteristics[static_cast<std::size_t>(disp) + static_cast<std::size_t>(i)] =
-              recv_chars[static_cast<std::size_t>(i)];
-        }
-      }
-    }
-  } else {
-    if (local_count > 0) {
-      MPI_Send(local_chars.data(), local_count, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-    }
-  }
 }
 
 int DergachevAMultistep2dParallelMPI::SelectBestInterval(const std::vector<double> &characteristics) {
