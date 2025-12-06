@@ -1,5 +1,4 @@
 #pragma once
-
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
