@@ -19,7 +19,7 @@ double SpherePerfFunc(double x, double y) {
 }  // namespace
 
 class DergachevAMultistep2dParallelPerfTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  const int kMaxIterations_ = 500;
+  const int kMaxIterations_ = 2000;
   InType input_data_;
 
   void SetUp() override {
@@ -28,7 +28,7 @@ class DergachevAMultistep2dParallelPerfTests : public ppc::util::BaseRunPerfTest
     input_data_.x_max = 5.0;
     input_data_.y_min = -5.0;
     input_data_.y_max = 5.0;
-    input_data_.epsilon = 0.001;
+    input_data_.epsilon = 0.0001;
     input_data_.r_param = 2.5;
     input_data_.max_iterations = kMaxIterations_;
   }

@@ -114,35 +114,55 @@ bool DergachevAMultistep2dParallelMPI::ValidationImpl() {
 }
 
 bool DergachevAMultistep2dParallelMPI::PreProcessingImpl() {
-  const auto &input = GetInput();
   trials_.clear();
   t_values_.clear();
-
-  double t0 = 0.0;
-  double t1 = 1.0;
-
-  t_values_.push_back(t0);
-  t_values_.push_back(t1);
-
-  double x0 = PeanoToX(t0, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
-  double y0 = PeanoToY(t0, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
-  double z0 = input.func(x0, y0);
-
-  double x1 = PeanoToX(t1, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
-  double y1 = PeanoToY(t1, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
-  double z1 = input.func(x1, y1);
-
-  trials_.emplace_back(x0, y0, z0);
-  trials_.emplace_back(x1, y1, z1);
-
   m_estimate_ = 1.0;
-
   return true;
 }
 
 bool DergachevAMultistep2dParallelMPI::RunImpl() {
   const auto &input = GetInput();
   auto &output = GetOutput();
+
+  trials_.clear();
+  t_values_.clear();
+
+  std::vector<double> initial_data(8);
+
+  if (world_rank_ == 0) {
+    double t0 = 0.0;
+    double t1 = 1.0;
+
+    double x0 = PeanoToX(t0, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
+    double y0 = PeanoToY(t0, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
+    double z0 = input.func(x0, y0);
+
+    double x1 = PeanoToX(t1, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
+    double y1 = PeanoToY(t1, input.x_min, input.x_max, input.y_min, input.y_max, peano_level_);
+    double z1 = input.func(x1, y1);
+
+    initial_data[0] = t0;
+    initial_data[1] = x0;
+    initial_data[2] = y0;
+    initial_data[3] = z0;
+    initial_data[4] = t1;
+    initial_data[5] = x1;
+    initial_data[6] = y1;
+    initial_data[7] = z1;
+
+    for (int proc = 1; proc < world_size_; ++proc) {
+      MPI_Send(initial_data.data(), 8, MPI_DOUBLE, proc, 0, MPI_COMM_WORLD);
+    }
+  } else {
+    MPI_Recv(initial_data.data(), 8, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  }
+
+  t_values_.push_back(initial_data[0]);
+  t_values_.push_back(initial_data[4]);
+  trials_.emplace_back(initial_data[1], initial_data[2], initial_data[3]);
+  trials_.emplace_back(initial_data[5], initial_data[6], initial_data[7]);
+
+  m_estimate_ = 1.0;
 
   for (int iter = 0; iter < input.max_iterations; ++iter) {
     BroadcastTrialData();
@@ -218,15 +238,21 @@ bool DergachevAMultistep2dParallelMPI::PostProcessingImpl() {
 }
 
 void DergachevAMultistep2dParallelMPI::SortTrialsByT() {
-  std::size_t n = t_values_.size();
-  for (std::size_t i = 0; i < n - 1; ++i) {
-    for (std::size_t j = 0; j < n - i - 1; ++j) {
-      if (t_values_[j] > t_values_[j + 1]) {
-        std::swap(t_values_[j], t_values_[j + 1]);
-        std::swap(trials_[j], trials_[j + 1]);
-      }
-    }
+  std::vector<std::size_t> indices(t_values_.size());
+  for (std::size_t i = 0; i < indices.size(); ++i) {
+    indices[i] = i;
   }
+  std::sort(indices.begin(), indices.end(),
+            [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
+
+  std::vector<double> sorted_t(t_values_.size());
+  std::vector<TrialPoint> sorted_trials(trials_.size());
+  for (std::size_t i = 0; i < indices.size(); ++i) {
+    sorted_t[i] = t_values_[indices[i]];
+    sorted_trials[i] = trials_[indices[i]];
+  }
+  t_values_ = std::move(sorted_t);
+  trials_ = std::move(sorted_trials);
 }
 
 double DergachevAMultistep2dParallelMPI::ComputeLipschitzEstimate() {
