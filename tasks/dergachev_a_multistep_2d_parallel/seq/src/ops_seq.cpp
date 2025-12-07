@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "dergachev_a_multistep_2d_parallel/common/include/common.hpp"
@@ -147,8 +148,7 @@ void DergachevAMultistep2dParallelSEQ::SortTrialsByT() {
   for (std::size_t i = 0; i < indices.size(); ++i) {
     indices[i] = i;
   }
-  std::sort(indices.begin(), indices.end(),
-            [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
+  std::ranges::sort(indices, [this](std::size_t a, std::size_t b) { return t_values_[a] < t_values_[b]; });
 
   std::vector<double> sorted_t(t_values_.size());
   std::vector<TrialPoint> sorted_trials(trials_.size());
