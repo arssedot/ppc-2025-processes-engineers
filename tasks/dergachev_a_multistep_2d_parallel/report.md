@@ -338,6 +338,8 @@ counts[i] = base_count + (i < remainder ? 1 : 0)
 
 4. Microsoft. Microsoft MPI Documentation. https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi
 
+5. Баркалов К.А., Использование параллельных характеристических алгоритмов для решения многомерных задач глобальной оптимизации, 2014
+
 ## Приложение. Фрагменты кода
 
 ### Инициализация и рассылка начальных данных (RunImpl)
